@@ -83,12 +83,13 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 		dbPath:   dbPath,
 		bName:    []byte(bName),
 		store:    store,
+		reqs:     make(map[string]*req),
 		cap:      cap,
 		prunecap: int64(0.001 * float64(cap)),
-		sTime:    time.Now().UTC(),
 		remain:   cap,
 		items:    make(map[string]*item, 10e3),
 		list:     list.New(),
+		sTime:    time.Now().UTC(),
 	}
 }
 
