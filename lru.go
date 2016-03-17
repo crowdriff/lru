@@ -255,14 +255,21 @@ func (l *LRU) addItem(key []byte, size int64) {
 // returned.
 // Note: this method should only be called when the LRUs mutex is locked!
 func (l *LRU) addItemWithMu(key []byte, size int64) [][]byte {
-	l.remain -= size
 	keyStr := string(key)
-	item := item{
-		key:  key,
-		size: size,
+	i, exists := l.items[keyStr]
+	if exists {
+		// the item already exists in the LRU, update size if necessary
+		l.remain -= (size - i.size)
+		i.size = size
+	} else {
+		l.remain -= size
+		i = &item{
+			key:  key,
+			size: size,
+		}
+		l.items[keyStr] = i
 	}
-	item.elem = l.list.PushFront(&item)
-	l.items[keyStr] = &item
+	i.elem = l.list.PushFront(i)
 	if l.remain < 0 {
 		return l.prune()
 	}
