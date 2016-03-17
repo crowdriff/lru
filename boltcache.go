@@ -92,9 +92,8 @@ func (l *LRU) deleteFromBolt(keys [][]byte) error {
 	return l.cache.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		for _, key := range keys {
-			if err := b.Delete(key); err != nil {
-				return err
-			}
+			// ignore a delete error to avoid having the entire transaction fail
+			_ = b.Delete(key)
 		}
 		return nil
 	})
