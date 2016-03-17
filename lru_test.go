@@ -291,6 +291,69 @@ var _ = Describe("LRU", func() {
 			Ω(string(v)).Should(Equal("value"))
 		})
 	})
+
+	Context("addItem", func() {
+
+		It("should prune values from the bolt database when capacity is exceeded", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			for i := 0; i < 3; i++ {
+				err := l.put([]byte(strconv.Itoa(i)), make([]byte, 260))
+				Ω(err).ShouldNot(HaveOccurred())
+			}
+
+			l.addItem([]byte("3"), 300)
+			Ω(l.puts).Should(Equal(int64(4)))
+			Ω(l.bput).Should(Equal(int64(1080)))
+			Ω(l.items).Should(HaveLen(3))
+			Ω(l.list.Len()).Should(Equal(3))
+			Ω(string(l.list.Front().Value.(*item).key)).Should(Equal("3"))
+			Eventually(func() []byte {
+				return l.getFromBolt([]byte("0"))
+			}, 100*time.Millisecond, time.Millisecond).Should(BeNil())
+		})
+	})
+
+	Context("addItemWithMu", func() {
+
+		It("should update an item's size if it already exists in the LRU", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			toRem := l.addItemWithMu([]byte("key1"), 100)
+			Ω(toRem).Should(BeNil())
+			toRem = l.addItemWithMu([]byte("key2"), 200)
+			Ω(toRem).Should(BeNil())
+			i := l.list.Front().Value.(*item)
+			Ω(string(i.key)).Should(Equal("key2"))
+			Ω(l.remain).Should(Equal(int64(700)))
+
+			toRem = l.addItemWithMu([]byte("key1"), 120)
+			Ω(toRem).Should(BeNil())
+			i = l.list.Front().Value.(*item)
+			Ω(string(i.key)).Should(Equal("key1"))
+			Ω(i.size).Should(Equal(int64(120)))
+			Ω(l.remain).Should(Equal(int64(680)))
+		})
+
+		It("should prune the LRU when the capacity is exceeded", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			toRem := l.addItemWithMu([]byte("key1"), 200)
+			Ω(toRem).Should(BeNil())
+			toRem = l.addItemWithMu([]byte("key2"), 600)
+			Ω(toRem).Should(BeNil())
+			// should trigger a pruning
+			toRem = l.addItemWithMu([]byte("key3"), 600)
+			Ω(toRem).ShouldNot(BeNil())
+			Ω(toRem).Should(HaveLen(2))
+			Ω(string(toRem[0])).Should(Equal("key1"))
+			Ω(string(toRem[1])).Should(Equal("key2"))
+			i := l.list.Front().Value.(*item)
+			Ω(string(i.key)).Should(Equal("key3"))
+			Ω(l.remain).Should(Equal(int64(400)))
+			Ω(l.items).Should(HaveLen(1))
+		})
+	})
 })
 
 type errStore struct{}
