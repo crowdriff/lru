@@ -58,46 +58,6 @@ var _ = Describe("LRU", func() {
 		})
 	})
 
-	Context("PreStoreFn", func() {
-
-		It("should return an error when the PreStoreFn returns an error", func() {
-			// set up the LRU
-			l := newDefaultLRU()
-			defer closeBoltDB(l)
-			Ω(l.PreStoreFn).Should(BeNil())
-			l.PreStoreFn = func(key []byte) ([]byte, error) {
-				Ω(string(key)).Should(Equal("key"))
-				return nil, errors.New("prestorefn error")
-			}
-			l.store = &errStore{}
-			// make request
-			v, err := l.getFromStore([]byte("key"))
-			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("prestorefn error"))
-			Ω(v).Should(BeNil())
-		})
-
-		It("should update the key provided to the store in the PreStoreFn", func() {
-			// set up the LRU
-			l := newDefaultLRU()
-			defer closeBoltDB(l)
-			Ω(l.PreStoreFn).Should(BeNil())
-			l.PreStoreFn = func(key []byte) ([]byte, error) {
-				Ω(string(key)).Should(Equal("key"))
-				return []byte("newKey"), nil
-			}
-			l.store = newStore(func(key []byte) ([]byte, error) {
-				Ω(string(key)).Should(Equal("newKey"))
-				return nil, errors.New("store error")
-			})
-			// make request
-			v, err := l.getFromStore([]byte("key"))
-			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("store error"))
-			Ω(v).Should(BeNil())
-		})
-	})
-
 	Context("PostStoreFn", func() {
 
 		It("should receive an error and respond with its own error", func() {

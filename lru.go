@@ -11,21 +11,12 @@ import (
 // LRU represents a read-through LRU cache backed by a persistent boltDB
 // database.
 type LRU struct {
-	// PreStoreFn is an optional function that is called before attempting to
-	// retrieve a value from the remote store. Its only argument is the item's
-	// key. If an error is returned, the request will fail immediately and
-	// return the error. Otherwise, it should return the key that will be used
-	// when calling the remote store. This function should not be updated
-	// concurrently while using the LRU.
-	PreStoreFn func([]byte) ([]byte, error)
-
 	// PostStoreFn is an optional function that is called after a response has
 	// been received from the remote store. Its two arguments are the item's
 	// value and the error returned by the remote store's Get method. It should
 	// return the value and error that will be stored in the LRU and returned
-	// to the calling function. If the PreStoreFn returns an error, this
-	// function will never be called for that request. This function should not
-	// be updated concurrently while using the LRU.
+	// to the calling Get method. This function should not be updated
+	// concurrently while using the LRU.
 	PostStoreFn func([]byte, error) ([]byte, error)
 
 	// boltDB cache
@@ -83,11 +74,11 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 	if cap < 1000 {
 		cap = 1000
 	}
-	// assign a dfault dbPath of "/tmp/lru.db"
+	// assign a default database path of "/tmp/lru.db"
 	if dbPath == "" {
 		dbPath = "/tmp/lru.db"
 	}
-	// assign a default bName of "lru"
+	// assign a default bucket name of "lru"
 	if bName == "" {
 		bName = "lru"
 	}
@@ -185,37 +176,32 @@ func (l *LRU) hit(key []byte) bool {
 // this method will wait for that request to complete and return the resulting
 // value and error.
 func (l *LRU) getFromStore(key []byte) ([]byte, error) {
-	// call the PreStoreFn, if it exists
-	if l.PreStoreFn != nil {
-		var err error
-		key, err = l.PreStoreFn(key)
-		if err != nil {
-			return nil, err
-		}
-	}
 	keyStr := string(key)
 
 	// register request
 	l.muReqs.Lock()
 	if r, ok := l.reqs[keyStr]; ok {
-		// request for this key already exists
+		// a request for this key is in currently in progress
 		l.muReqs.Unlock()
 		r.wg.Wait()
-		return l.getFromStoreReturn(r.value, r.err)
+		return r.value, r.err
 	}
 	r := &req{}
 	r.wg.Add(1)
 	l.reqs[keyStr] = r
 	l.muReqs.Unlock()
 
-	// obtain from the remote store
+	// obtain from the remote store and call the PostStoreFn if non-nil
 	r.value, r.err = l.store.Get(key)
+	if l.PostStoreFn != nil {
+		r.value, r.err = l.PostStoreFn(r.value, r.err)
+	}
 	r.wg.Done()
 
 	// if an error occurred, delete the request and return the error.
 	if r.err != nil {
 		l.deleteReq(keyStr)
-		return l.getFromStoreReturn(nil, r.err)
+		return nil, r.err
 	}
 
 	// in a new goroutine, write the received value to the cache and then delete
@@ -225,16 +211,7 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 		l.deleteReq(keyStr)
 	}()
 
-	return l.getFromStoreReturn(r.value, r.err)
-}
-
-// getFromStoreReturn calls the PostStoreFn if it exists and returns the
-// results.
-func (l *LRU) getFromStoreReturn(v []byte, err error) ([]byte, error) {
-	if l.PostStoreFn == nil {
-		return v, err
-	}
-	return l.PostStoreFn(v, err)
+	return r.value, nil
 }
 
 // deleteReq safely deletes the request from the "reqs" map with the provided
