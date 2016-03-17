@@ -33,3 +33,21 @@ func closeBoltDB(l *LRU) {
 		l.Close()
 	}
 }
+
+func newStore(get func([]byte) ([]byte, error)) Store {
+	return &testStore{get}
+}
+
+type testStore struct {
+	get func([]byte) ([]byte, error)
+}
+
+func (s *testStore) Open() error {
+	return nil
+}
+func (s *testStore) Close() error {
+	return nil
+}
+func (s *testStore) Get(key []byte) ([]byte, error) {
+	return s.get(key)
+}

@@ -212,14 +212,14 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	r.value, r.err = l.store.Get(key)
 	r.wg.Done()
 
-	// if an error occured, delete the request and return the error.
+	// if an error occurred, delete the request and return the error.
 	if r.err != nil {
 		l.deleteReq(keyStr)
 		return l.getFromStoreReturn(nil, r.err)
 	}
 
-	// in a new goroutine, write received value to the cache and then delete the
-	// request from the "reqs" map.
+	// in a new goroutine, write the received value to the cache and then delete
+	// the request from the "reqs" map.
 	go func() {
 		l.put(key, r.value)
 		l.deleteReq(keyStr)
@@ -258,8 +258,9 @@ func (l *LRU) put(key, val []byte) error {
 	return nil
 }
 
-// addItem adds the provided key and size to the LRU. If there are any items to
-// prune, they will be deleted from the bolt database in a new goroutine.
+// addItem adds the provided key and size to the LRU. If there are any items
+// that have been pruned, they will be deleted from the bolt database in a new
+// goroutine.
 func (l *LRU) addItem(key []byte, size int64) {
 	l.mu.Lock()
 	toPrune := l.addItemWithMu(key, size)
@@ -272,8 +273,9 @@ func (l *LRU) addItem(key []byte, size int64) {
 }
 
 // addItemWithMu adds the provided key and size to the LRU and calls "prune" if
-// the LRU has exceeded its capacity. If there are any items to prune, their
-// keys are returned.
+// the LRU has exceeded its capacity. If there are any items that have been
+// pruned from the LRU (but not the bolt database, yet), their keys are
+// returned.
 // Note: this method should only be called when the LRUs mutex is locked!
 func (l *LRU) addItemWithMu(key []byte, size int64) [][]byte {
 	l.remain -= size
@@ -290,8 +292,8 @@ func (l *LRU) addItemWithMu(key []byte, size int64) [][]byte {
 	return nil
 }
 
-// prune evicts the least recently used items until the prune capacity has been
-// reached. The keys of the pruned items are returned.
+// prune evicts the least recently used items from the LRU until the prune
+// capacity has been reached. The keys of the pruned items are returned.
 // Note: this method should only be called when the LRUs mutex is locked!
 func (l *LRU) prune() [][]byte {
 	var toPrune [][]byte
