@@ -2,6 +2,7 @@ package lru
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -181,7 +182,7 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	// register request
 	l.muReqs.Lock()
 	if r, ok := l.reqs[keyStr]; ok {
-		// a request for this key is in currently in progress
+		// a request for this key is currently in progress
 		l.muReqs.Unlock()
 		r.wg.Wait()
 		return r.value, r.err
@@ -191,11 +192,8 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	l.reqs[keyStr] = r
 	l.muReqs.Unlock()
 
-	// obtain from the remote store and call the PostStoreFn if non-nil
-	r.value, r.err = l.store.Get(key)
-	if l.PostStoreFn != nil {
-		r.value, r.err = l.PostStoreFn(r.value, r.err)
-	}
+	// obtain the result from the remote store
+	r.value, r.err = l.getResFromStore(key)
 	r.wg.Done()
 
 	// if an error occurred, delete the request and return the error.
@@ -212,6 +210,26 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	}()
 
 	return r.value, nil
+}
+
+// getResFromStore attempts to retrieve the value from the remote store
+// corresponding to the provided key. If the PostStoreFn is non-nil, it is
+// called. If either the store's Get method or PostStoreFn method panic, the
+// panic is recovered and an error is returned to the caller.
+func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
+	// recover from a panic by returning an error
+	defer func() {
+		if r := recover(); r != nil {
+			val = nil
+			err = fmt.Errorf("recovered from a panic: %v", r)
+		}
+	}()
+	// obtain from the remote store and call the PostStoreFn if non-nil
+	val, err = l.store.Get(key)
+	if l.PostStoreFn != nil {
+		val, err = l.PostStoreFn(val, err)
+	}
+	return
 }
 
 // deleteReq safely deletes the request from the "reqs" map with the provided

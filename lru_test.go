@@ -228,6 +228,30 @@ var _ = Describe("LRU", func() {
 			Ω(reqs).Should(Equal(int64(1)))
 			Ω(hookCalls).Should(Equal(int64(1)))
 		})
+
+		It("should recover from a panic in the store's Get and return an error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.store = newStore(func(key []byte) ([]byte, error) {
+				panic("error message")
+			})
+			val, err := l.getFromStore([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err.Error()).Should(Equal("recovered from a panic: error message"))
+			Ω(val).Should(BeNil())
+		})
+
+		It("should recover from a panic in PostStoreFn and return an error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.PostStoreFn = func(val []byte, err error) ([]byte, error) {
+				panic("error message")
+			}
+			val, err := l.getFromStore([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err.Error()).Should(Equal("recovered from a panic: error message"))
+			Ω(val).Should(BeNil())
+		})
 	})
 
 	Context("PostStoreFn", func() {
