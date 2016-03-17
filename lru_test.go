@@ -58,7 +58,7 @@ var _ = Describe("LRU", func() {
 			defer closeBoltDB(l)
 			err := l.Open()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(l.cache).ShouldNot(BeNil())
+			Ω(l.db).ShouldNot(BeNil())
 		})
 	})
 
@@ -237,7 +237,7 @@ var _ = Describe("LRU", func() {
 			})
 			val, err := l.getFromStore([]byte("key"))
 			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("recovered from a panic: error message"))
+			Ω(err.Error()).Should(Equal("panic: error message"))
 			Ω(val).Should(BeNil())
 		})
 
@@ -249,7 +249,7 @@ var _ = Describe("LRU", func() {
 			}
 			val, err := l.getFromStore([]byte("key"))
 			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("recovered from a panic: error message"))
+			Ω(err.Error()).Should(Equal("panic: error message"))
 			Ω(val).Should(BeNil())
 		})
 	})

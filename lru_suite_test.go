@@ -29,7 +29,7 @@ func newDefaultLRU() *LRU {
 }
 
 func closeBoltDB(l *LRU) {
-	if l.cache != nil {
+	if l.db != nil {
 		l.Close()
 	}
 }

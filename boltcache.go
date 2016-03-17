@@ -4,13 +4,13 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-// openBoltDB opens the boltDB database and assigns it to the LRU as "cache".
+// openBoltDB opens the boltDB database and assigns it to the LRU as "db".
 func (l *LRU) openBoltDB() error {
 	db, err := bolt.Open(l.dbPath, 0666, nil)
 	if err != nil {
 		return err
 	}
-	l.cache = db
+	l.db = db
 	return l.fillCacheFromBolt()
 }
 
@@ -19,7 +19,7 @@ func (l *LRU) openBoltDB() error {
 // deleted.
 func (l *LRU) fillCacheFromBolt() error {
 	// fill the LRU with existing data
-	return l.cache.Update(func(tx *bolt.Tx) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
 		// create the bucket if it doesn't exist
 		b, err := tx.CreateBucketIfNotExists(l.bName)
 		if err != nil {
@@ -49,7 +49,7 @@ func (l *LRU) fillCacheFromBolt() error {
 // bolt database, or nil if the key doesn't exist.
 func (l *LRU) getFromBolt(key []byte) []byte {
 	var buf []byte
-	err := l.cache.View(func(tx *bolt.Tx) error {
+	err := l.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		v := b.Get(key)
 		if v == nil {
@@ -68,7 +68,7 @@ func (l *LRU) getFromBolt(key []byte) []byte {
 // putIntoBolt writes the provided key and value into the bolt database and
 // returns any error encountered.
 func (l *LRU) putIntoBolt(key, val []byte) error {
-	return l.cache.Batch(func(tx *bolt.Tx) error {
+	return l.db.Batch(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		return b.Put(key, val)
 	})
@@ -77,7 +77,7 @@ func (l *LRU) putIntoBolt(key, val []byte) error {
 // emptyBolt completely empties the bolt database and returns any error
 // encountered.
 func (l *LRU) emptyBolt() error {
-	return l.cache.Update(func(tx *bolt.Tx) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
 		if err := tx.DeleteBucket(l.bName); err != nil {
 			return err
 		}
@@ -89,7 +89,7 @@ func (l *LRU) emptyBolt() error {
 // deleteFromBolt deletes the provided slice of keys from the bolt database and
 // returns any error encountered.
 func (l *LRU) deleteFromBolt(keys [][]byte) error {
-	return l.cache.Update(func(tx *bolt.Tx) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		for _, key := range keys {
 			// ignore a delete error to avoid having the entire transaction fail

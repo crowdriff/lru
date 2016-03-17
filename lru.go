@@ -13,15 +13,16 @@ import (
 // database.
 type LRU struct {
 	// PostStoreFn is an optional function that is called after a response has
-	// been received from the remote store. Its two arguments are the item's
-	// value and the error returned by the remote store's Get method. It should
-	// return the value and error that will be stored in the LRU and returned
-	// to the calling Get method. This function should not be updated
-	// concurrently while using the LRU.
+	// been received from the remote store. Its two arguments are the value and
+	// error returned by the remote store's Get method. It should return the
+	// value that will be stored in the LRU and returned to the calling Get
+	// method. If a non-nil error is returned, no value will be saved and the
+	// error will be returned to the calling Get method. This function should
+	// not be updated  concurrently while using the LRU.
 	PostStoreFn func([]byte, error) ([]byte, error)
 
 	// boltDB cache
-	cache  *bolt.DB
+	db     *bolt.DB
 	dbPath string
 	bName  []byte // LRU bucket name
 
@@ -103,8 +104,8 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 }
 
 // Open opens the LRU's remote store and, if successful, the local bolt
-// database. If the bolt database contains existing items, the cache is filled
-// up to its capacity and the overflow is deleted.
+// database. If the bolt database contains existing items, the LRU is filled
+// up to its capacity and the overflow is deleted from the database.
 func (l *LRU) Open() error {
 	if err := l.store.Open(); err != nil {
 		return err
@@ -130,7 +131,7 @@ func (l *LRU) close() error {
 	l.items = make(map[string]*item)
 	l.remain = l.cap
 	l.mu.Unlock()
-	return l.cache.Close()
+	return l.db.Close()
 }
 
 // Get attempts to retrieve the value for the provided key. An error is returned
@@ -202,8 +203,8 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 		return nil, r.err
 	}
 
-	// in a new goroutine, write the received value to the cache and then delete
-	// the request from the "reqs" map.
+	// in a new goroutine, write the received value to the database + LRU and
+	// then delete the request from the "reqs" map.
 	go func() {
 		l.put(key, r.value)
 		l.deleteReq(keyStr)
@@ -214,17 +215,17 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 
 // getResFromStore attempts to retrieve the value from the remote store
 // corresponding to the provided key. If the PostStoreFn is non-nil, it is
-// called. If either the store's Get method or PostStoreFn method panic, the
-// panic is recovered and an error is returned to the caller.
+// called. If either the store's Get method or PostStoreFn panic, the panic is
+// recovered and an error is returned to the caller.
 func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
 	// recover from a panic by returning an error
 	defer func() {
 		if r := recover(); r != nil {
 			val = nil
-			err = fmt.Errorf("recovered from a panic: %v", r)
+			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
-	// obtain from the remote store and call the PostStoreFn if non-nil
+	// obtain from the remote store and call PostStoreFn if non-nil
 	val, err = l.store.Get(key)
 	if l.PostStoreFn != nil {
 		val, err = l.PostStoreFn(val, err)
@@ -241,7 +242,7 @@ func (l *LRU) deleteReq(key string) {
 }
 
 // put adds the provided key and value to the local cache and LRU. If the cache
-// exceeds its capacity, the least recently used item(s) will be evicted.
+// now exceeds its capacity, the least recently used item(s) will be evicted.
 func (l *LRU) put(key, val []byte) error {
 	// add to boltdb store
 	err := l.putIntoBolt(key, val)
