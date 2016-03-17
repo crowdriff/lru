@@ -1,7 +1,6 @@
 package lru
 
 import (
-	"bytes"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
@@ -65,7 +64,46 @@ var _ = Describe("Boltcache", func() {
 			err := l.putIntoBolt([]byte("key"), []byte("value"))
 			Ω(err).ShouldNot(HaveOccurred())
 			v := l.getFromBolt([]byte("key"))
-			Ω(bytes.Equal(v, []byte("value"))).Should(BeTrue())
+			Ω(string(v)).Should(Equal("value"))
+		})
+
+		It("should return nil when the db.View function returns an error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			err := l.putIntoBolt([]byte("key"), []byte("value"))
+			Ω(err).ShouldNot(HaveOccurred())
+			l.db.Close()
+			v := l.getFromBolt([]byte("key"))
+			Ω(v).Should(BeNil())
+		})
+	})
+
+	Context("getBufFromBolt", func() {
+
+		It("should return nil when trying to retrieve a key that doesn't exist", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			b := l.getBufFromBolt([]byte("key"))
+			Ω(b).Should(BeNil())
+		})
+
+		It("should return a buffer for the value from bolt", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			err := l.putIntoBolt([]byte("key"), []byte("value"))
+			Ω(err).ShouldNot(HaveOccurred())
+			b := l.getBufFromBolt([]byte("key"))
+			Ω(b.String()).Should(Equal("value"))
+		})
+
+		It("should return nil when the db.View function returns an error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			err := l.putIntoBolt([]byte("key"), []byte("value"))
+			Ω(err).ShouldNot(HaveOccurred())
+			l.db.Close()
+			b := l.getBufFromBolt([]byte("key"))
+			Ω(b).Should(BeNil())
 		})
 	})
 

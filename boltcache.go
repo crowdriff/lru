@@ -1,6 +1,8 @@
 package lru
 
 import (
+	"bytes"
+
 	"github.com/boltdb/bolt"
 )
 
@@ -60,6 +62,29 @@ func (l *LRU) getFromBolt(key []byte) []byte {
 		return nil
 	})
 	if err != nil {
+		return nil
+	}
+	return buf
+}
+
+// getBufFromBolt returns a buffer corresponding to the provided key from the
+// bolt database, or nil if the key doesn't exist.
+func (l *LRU) getBufFromBolt(key []byte) *bytes.Buffer {
+	var buf *bytes.Buffer
+	err := l.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(l.bName)
+		v := b.Get(key)
+		if v == nil {
+			return nil
+		}
+		buf = getBuf()
+		_, err := buf.Write(v)
+		return err
+	})
+	if err != nil {
+		if buf != nil {
+			putBuf(buf)
+		}
 		return nil
 	}
 	return buf
