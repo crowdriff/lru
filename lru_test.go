@@ -118,6 +118,72 @@ var _ = Describe("LRU", func() {
 			Ω(err).Should(HaveOccurred())
 			Ω(err).Should(MatchError(errNoStore))
 		})
+
+		It("should return an error from the remote store if it hits the LRU but isn't found in the database", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.addItemWithMu([]byte("key"), 400)
+			_, err := l.Get([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err.Error()).Should(Equal("no remote store available"))
+			Ω(l.hits).Should(Equal(int64(0)))
+			Ω(l.bget).Should(Equal(int64(0)))
+			Ω(l.misses).Should(Equal(int64(1)))
+		})
+	})
+
+	Context("GetWriterTo", func() {
+
+		It("should return a value from the local bolt cache", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			err := l.put([]byte("key"), []byte("value"))
+			Ω(err).ShouldNot(HaveOccurred())
+			l.store = &errStore{}
+			wt, err := l.GetWriterTo([]byte("key"))
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(wt).ShouldNot(BeNil())
+			val := stringFromWriterTo(wt)
+			Ω(val).Should(Equal("value"))
+		})
+
+		It("should return a value from the remote store", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			var reachedStore bool
+			l.store = newStore(func(key []byte) ([]byte, error) {
+				Ω(string(key)).Should(Equal("key"))
+				reachedStore = true
+				return []byte("value"), nil
+			})
+			wt, err := l.GetWriterTo([]byte("key"))
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(wt).ShouldNot(BeNil())
+			val := stringFromWriterTo(wt)
+			Ω(val).Should(Equal("value"))
+			Ω(reachedStore).Should(BeTrue())
+		})
+
+		It("should return an error if the remote store returns an error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			wt, err := l.GetWriterTo([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err).Should(MatchError(errNoStore))
+			Ω(wt).Should(BeNil())
+		})
+
+		It("should return an error from the remote store if it hits the LRU but isn't found in the database", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.addItemWithMu([]byte("key"), 400)
+			_, err := l.GetWriterTo([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err.Error()).Should(Equal("no remote store available"))
+			Ω(l.hits).Should(Equal(int64(0)))
+			Ω(l.bget).Should(Equal(int64(0)))
+			Ω(l.misses).Should(Equal(int64(1)))
+		})
 	})
 
 	Context("hit", func() {
@@ -125,8 +191,8 @@ var _ = Describe("LRU", func() {
 		It("should return false and increment misses when a cache miss occurs", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
-			ok := l.hit([]byte("key"))
-			Ω(ok).Should(BeFalse())
+			size := l.hit([]byte("key"))
+			Ω(size).Should(BeNumerically("<", 0))
 			Ω(l.misses).Should(Equal(int64(1)))
 			Ω(l.hits).Should(Equal(int64(0)))
 			Ω(l.bget).Should(Equal(int64(0)))
@@ -137,8 +203,8 @@ var _ = Describe("LRU", func() {
 			defer closeBoltDB(l)
 			err := l.put([]byte("key"), []byte("value"))
 			Ω(err).ShouldNot(HaveOccurred())
-			ok := l.hit([]byte("key"))
-			Ω(ok).Should(BeTrue())
+			size := l.hit([]byte("key"))
+			Ω(size).Should(Equal(int64(5)))
 			Ω(l.misses).Should(Equal(int64(0)))
 			Ω(l.hits).Should(Equal(int64(1)))
 			Ω(l.bget).Should(Equal(int64(5)))
@@ -308,8 +374,8 @@ var _ = Describe("LRU", func() {
 			defer closeBoltDB(l)
 			err := l.put([]byte("key"), []byte("value"))
 			Ω(err).ShouldNot(HaveOccurred())
-			exists := l.hit([]byte("key"))
-			Ω(exists).Should(BeTrue())
+			size := l.hit([]byte("key"))
+			Ω(size).Should(Equal(int64(5)))
 			v := l.getFromBolt([]byte("key"))
 			Ω(v).ShouldNot(BeNil())
 			Ω(string(v)).Should(Equal("value"))

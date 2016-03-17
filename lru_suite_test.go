@@ -1,6 +1,7 @@
 package lru
 
 import (
+	"io"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -32,6 +33,14 @@ func closeBoltDB(l *LRU) {
 	if l.db != nil {
 		l.Close()
 	}
+}
+
+func stringFromWriterTo(wt io.WriterTo) string {
+	buf := getBuf()
+	defer putBuf(buf)
+	_, err := wt.WriteTo(buf)
+	Ω(err).ShouldNot(HaveOccurred())
+	return buf.String()
 }
 
 func newStore(get func([]byte) ([]byte, error)) Store {

@@ -3,6 +3,7 @@ package lru
 import (
 	"container/list"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -135,17 +136,43 @@ func (l *LRU) close() error {
 }
 
 // Get attempts to retrieve the value for the provided key. An error is returned
-// if either no value exists or an error occurs retrieving the value from the
-// remote store.
+// if either no value exists or an error occurs while retrieving the value from
+// the remote store. Byte slices returned by this method should not be modified.
 func (l *LRU) Get(key []byte) ([]byte, error) {
 	// attempt to get from local cache
-	if l.hit(key) {
+	if size := l.hit(key); size >= 0 {
 		if v := l.getFromBolt(key); v != nil {
 			return v, nil
 		}
+		l.hitToMiss(size)
 	}
 	// retrieve from the remote store
 	return l.getFromStore(key)
+}
+
+// GetWriterTo attempts to retrieve the value for the provided key, returning
+// an io.WriterTo. An error is returned if either no value exists or an error
+// occurs while retrieving the value from the remote store.
+//
+// The advantage to using this method over Get is that an internal buffer pool
+// is utilized to minimize creating and allocating new byte slices. Upon calling
+// WriteTo, the value is written to the provided io.Writer and the buffer is
+// then returned to the pool to be used by another call to GetWriterTo. The
+// WriteTo method should be called exactly once.
+func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
+	// attempt to get buffer from local cache
+	if size := l.hit(key); size >= 0 {
+		if buf := l.getBufFromBolt(key); buf != nil {
+			return newWriterToFromBuf(buf), nil
+		}
+		l.hitToMiss(size)
+	}
+	// retrieve from the remote store
+	v, err := l.getFromStore(key)
+	if err != nil {
+		return nil, err
+	}
+	return newWriterToFromData(v), nil
 }
 
 // Empty completely empties the cache and underlying bolt database.
@@ -158,19 +185,31 @@ func (l *LRU) Empty() error {
 	return l.emptyBolt()
 }
 
-// hit registers a 'hit' for the provided key in the LRU and returns true if
-// the key exists.
-func (l *LRU) hit(key []byte) bool {
+// hit registers a 'hit' for the provided key in the LRU and returns the size of
+// the value in bytes if it exists. If no key was found, hit registers a 'miss'
+// and returns -1.
+func (l *LRU) hit(key []byte) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if item, ok := l.items[string(key)]; ok {
 		l.list.MoveToFront(item.elem)
 		l.hits++
 		l.bget += item.size
-		return true
+		return item.size
 	}
 	l.misses++
-	return false
+	return -1
+}
+
+// hitToMiss registers that a retrieval attempt previously considered as a
+// 'hit' was actually a 'miss' when trying to obtain the value from the
+// database. The internal stats are updated to reflect this change.
+func (l *LRU) hitToMiss(size int64) {
+	l.mu.Lock()
+	l.hits--
+	l.bget -= size
+	l.misses++
+	l.mu.Unlock()
 }
 
 // getFromStore attempts to retrieve the value with the provided key from the
