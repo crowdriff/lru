@@ -70,7 +70,7 @@ type req struct {
 // db bucket name, and remote store. Before using the returned LRU, its Open
 // method must be called first.
 func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
-	// mimimum capacity is 1000 bytes
+	// minimum capacity is 1000 bytes
 	if cap < 1000 {
 		cap = 1000
 	}
