@@ -284,8 +284,7 @@ func (l *LRU) deleteReq(key string) {
 // now exceeds its capacity, the least recently used item(s) will be evicted.
 func (l *LRU) put(key, val []byte) error {
 	// add to boltdb store
-	err := l.putIntoBolt(key, val)
-	if err != nil {
+	if err := l.putIntoBolt(key, val); err != nil {
 		return err
 	}
 	// add to LRU
@@ -303,7 +302,7 @@ func (l *LRU) addItem(key []byte, size int64) {
 	l.bput += size
 	l.mu.Unlock()
 	if len(toPrune) > 0 {
-		go l.deleteFromBolt(toPrune)
+		l.deleteFromBolt(toPrune)
 	}
 }
 

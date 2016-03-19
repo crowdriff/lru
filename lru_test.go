@@ -398,9 +398,8 @@ var _ = Describe("LRU", func() {
 			Ω(l.items).Should(HaveLen(3))
 			Ω(l.list.Len()).Should(Equal(3))
 			Ω(string(l.list.Front().Value.(*item).key)).Should(Equal("3"))
-			Eventually(func() []byte {
-				return l.getFromBolt([]byte("0"))
-			}, 100*time.Millisecond, time.Millisecond).Should(BeNil())
+			v := l.getFromBolt([]byte("0"))
+			Ω(v).Should(BeNil())
 		})
 	})
 
