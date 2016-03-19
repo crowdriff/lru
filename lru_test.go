@@ -81,6 +81,30 @@ var _ = Describe("LRU", func() {
 		})
 	})
 
+	Context("SetPrunePct", func() {
+
+		It("should set the prunecap to 1 if the value is calculated to be 0 or below", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.SetPrunePct(0)
+			Ω(l.prunecap).Should(Equal(int64(1)))
+		})
+
+		It("should set the prunecap to the capacity if the value is calculated to be above the capacity", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.SetPrunePct(1.2)
+			Ω(l.prunecap).Should(Equal(int64(1000)))
+		})
+
+		It("should set the prunecap to the valid value provided", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.SetPrunePct(0.1)
+			Ω(l.prunecap).Should(Equal(int64(100)))
+		})
+	})
+
 	Context("Get", func() {
 
 		It("should return a value from the local bolt cache", func() {

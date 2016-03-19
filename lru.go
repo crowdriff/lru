@@ -32,17 +32,19 @@ type LRU struct {
 	muReqs sync.Mutex      // mutex protecting the reqs map
 	reqs   map[string]*req // map of current remote store requests
 
-	// cache capacity and prune capacity
-	cap      int64 // maximum capacity in bytes
-	prunecap int64 // minimum bytes to prune when evicting items (0.1% of capacity)
+	// total cache capacity
+	cap int64 // maximum capacity in bytes
 
 	// mutex protecting everything below
 	mu sync.Mutex
 
+	// space remaining and prune capacity
+	remain   int64 // space remaining in bytes
+	prunecap int64 // minimum bytes to prune when evicting items (default is 1% of capacity)
+
 	// internal cache objects
-	remain int64            // space remaining in bytes
-	items  map[string]*item // map of all items
-	list   *list.List       // eviction linked list
+	items map[string]*item // map of all items
+	list  *list.List       // eviction linked list
 
 	// cache stats
 	sTime   time.Time // starting time
@@ -96,7 +98,7 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 		store:    store,
 		reqs:     make(map[string]*req),
 		cap:      cap,
-		prunecap: int64(0.001 * float64(cap)),
+		prunecap: int64(0.01 * float64(cap)),
 		remain:   cap,
 		items:    make(map[string]*item, 10e3),
 		list:     list.New(),
@@ -133,6 +135,21 @@ func (l *LRU) close() error {
 	l.remain = l.cap
 	l.mu.Unlock()
 	return l.db.Close()
+}
+
+// SetPrunePct sets the percentage of bytes that are evicted from the LRU when
+// the size exceeds the overall capacity. The default prune percentage is 0.01
+// (1% of the total capacity in bytes).
+func (l *LRU) SetPrunePct(pct float64) {
+	l.mu.Lock()
+	l.prunecap = int64(pct * float64(l.cap))
+	if l.prunecap < 1 {
+		l.prunecap = 1
+	}
+	if l.prunecap > l.cap {
+		l.prunecap = l.cap
+	}
+	l.mu.Unlock()
 }
 
 // Get attempts to retrieve the value for the provided key. An error is returned
@@ -293,8 +310,7 @@ func (l *LRU) put(key, val []byte) error {
 }
 
 // addItem adds the provided key and size to the LRU. If there are any items
-// that have been pruned, they will be deleted from the bolt database in a new
-// goroutine.
+// that have been pruned, they will be deleted from the bolt database.
 func (l *LRU) addItem(key []byte, size int64) {
 	l.mu.Lock()
 	toPrune := l.addItemWithMu(key, size)
