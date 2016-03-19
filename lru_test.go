@@ -319,6 +319,18 @@ var _ = Describe("LRU", func() {
 			Ω(hookCalls).Should(Equal(int64(1)))
 		})
 
+		It("should return an error when the store returns a nil value and error", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.store = newStore(func(key []byte) ([]byte, error) {
+				return nil, nil
+			})
+			val, err := l.getFromStore([]byte("key"))
+			Ω(err).Should(HaveOccurred())
+			Ω(err.Error()).Should(Equal("invalid value returned from store: nil"))
+			Ω(val).Should(BeNil())
+		})
+
 		It("should recover from a panic in the store's Get and return an error", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)

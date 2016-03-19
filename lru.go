@@ -2,6 +2,7 @@ package lru
 
 import (
 	"container/list"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -285,6 +286,12 @@ func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
 	val, err = l.store.Get(key)
 	if l.PostStoreFn != nil {
 		val, err = l.PostStoreFn(val, err)
+	}
+	// ensure that one of 'val' or 'err' is nil
+	if err != nil {
+		val = nil
+	} else if val == nil {
+		err = errors.New("invalid value returned from store: nil")
 	}
 	return
 }
