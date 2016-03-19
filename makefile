@@ -18,10 +18,10 @@ test:
 	@ginkgo -r -v -cover -race
 
 tools:
-	go get github.com/golang/lint/golint
-	go get github.com/robfig/glock
-	go get github.com/onsi/ginkgo/ginkgo
-	go get github.com/onsi/gomega
+	go get -u github.com/golang/lint/golint
+	go get -u github.com/robfig/glock
+	go get -u github.com/onsi/ginkgo/ginkgo
+	go get -u github.com/onsi/gomega
 
 update_deps:
 	@glock save -n github.com/crowdriff/lru > Glockfile
