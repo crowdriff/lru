@@ -295,13 +295,6 @@ var _ = Describe("LRU", func() {
 				time.Sleep(time.Millisecond)
 				return []byte("value"), nil
 			})
-			var hookCalls int64
-			l.PostStoreFn = func(val []byte, err error) ([]byte, error) {
-				atomic.AddInt64(&hookCalls, 1)
-				Ω(err).ShouldNot(HaveOccurred())
-				Ω(string(val)).Should(Equal("value"))
-				return []byte("new value"), nil
-			}
 			var wg sync.WaitGroup
 			for i := 0; i < 3; i++ {
 				wg.Add(1)
@@ -310,13 +303,12 @@ var _ = Describe("LRU", func() {
 					v, err := l.getFromStore([]byte("key"))
 					Ω(err).ShouldNot(HaveOccurred())
 					Ω(v).ShouldNot(BeNil())
-					Ω(string(v)).Should(Equal("new value"))
+					Ω(string(v)).Should(Equal("value"))
 					wg.Done()
 				}()
 			}
 			wg.Wait()
 			Ω(reqs).Should(Equal(int64(1)))
-			Ω(hookCalls).Should(Equal(int64(1)))
 		})
 
 		It("should return an error when the store returns a nil value and error", func() {
@@ -341,65 +333,6 @@ var _ = Describe("LRU", func() {
 			Ω(err).Should(HaveOccurred())
 			Ω(err.Error()).Should(Equal("panic: error message"))
 			Ω(val).Should(BeNil())
-		})
-
-		It("should recover from a panic in PostStoreFn and return an error", func() {
-			l := newDefaultLRU()
-			defer closeBoltDB(l)
-			l.PostStoreFn = func(val []byte, err error) ([]byte, error) {
-				panic("error message")
-			}
-			val, err := l.getFromStore([]byte("key"))
-			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("panic: error message"))
-			Ω(val).Should(BeNil())
-		})
-	})
-
-	Context("PostStoreFn", func() {
-
-		It("should receive an error and respond with its own error", func() {
-			// set up the LRU
-			l := newDefaultLRU()
-			defer closeBoltDB(l)
-			Ω(l.PostStoreFn).Should(BeNil())
-			l.PostStoreFn = func(val []byte, err error) ([]byte, error) {
-				Ω(val).Should(BeNil())
-				Ω(err).Should(HaveOccurred())
-				Ω(err.Error()).Should(Equal("store error"))
-				return nil, errors.New("poststorefn error")
-			}
-			l.store = newStore(func(key []byte) ([]byte, error) {
-				Ω(string(key)).Should(Equal("key"))
-				return nil, errors.New("store error")
-			})
-			// make request
-			v, err := l.getFromStore([]byte("key"))
-			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("poststorefn error"))
-			Ω(v).Should(BeNil())
-		})
-
-		It("should receive a value and respond with its own value", func() {
-			// set up the LRU
-			l := newDefaultLRU()
-			defer closeBoltDB(l)
-			Ω(l.PostStoreFn).Should(BeNil())
-			l.PostStoreFn = func(val []byte, err error) ([]byte, error) {
-				Ω(val).ShouldNot(BeNil())
-				Ω(string(val)).Should(Equal("store val"))
-				Ω(err).ShouldNot(HaveOccurred())
-				return []byte("new val"), nil
-			}
-			l.store = newStore(func(key []byte) ([]byte, error) {
-				Ω(string(key)).Should(Equal("key"))
-				return []byte("store val"), nil
-			})
-			// make request
-			v, err := l.getFromStore([]byte("key"))
-			Ω(err).ShouldNot(HaveOccurred())
-			Ω(v).ShouldNot(BeNil())
-			Ω(string(v)).Should(Equal("new val"))
 		})
 	})
 

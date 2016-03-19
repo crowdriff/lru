@@ -11,18 +11,9 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-// LRU represents a read-through LRU cache backed by a persistent boltDB
-// database.
+// LRU is a persistent read-through local cache backed by BoltDB and a remote
+// store of your choosing.
 type LRU struct {
-	// PostStoreFn is an optional function that is called after a response has
-	// been received from the remote store. Its two arguments are the value and
-	// error returned by the remote store's Get method. It should return the
-	// value that will be stored in the LRU and returned to the calling Get
-	// method. If a non-nil error is returned, no value will be saved and the
-	// error will be returned to the calling Get method. This function should
-	// not be updated  concurrently while using the LRU.
-	PostStoreFn func([]byte, error) ([]byte, error)
-
 	// boltDB cache
 	db     *bolt.DB
 	dbPath string
@@ -93,18 +84,19 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 		store = &noStore{}
 	}
 	// initialize LRU
-	return &LRU{
-		dbPath:   dbPath,
-		bName:    []byte(bName),
-		store:    store,
-		reqs:     make(map[string]*req),
-		cap:      cap,
-		prunecap: int64(0.01 * float64(cap)),
-		remain:   cap,
-		items:    make(map[string]*item, 10e3),
-		list:     list.New(),
-		sTime:    time.Now().UTC(),
+	l := &LRU{
+		dbPath: dbPath,
+		bName:  []byte(bName),
+		store:  store,
+		reqs:   make(map[string]*req),
+		cap:    cap,
+		remain: cap,
+		items:  make(map[string]*item, 10e3),
+		list:   list.New(),
+		sTime:  time.Now().UTC(),
 	}
+	l.SetPrunePct(0.01)
+	return l
 }
 
 // Open opens the LRU's remote store and, if successful, the local bolt
@@ -282,12 +274,9 @@ func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
-	// obtain from the remote store and call PostStoreFn if non-nil
+	// obtain the results from the remote store ensure that exactly one of 'val'
+	// or 'err' is nil
 	val, err = l.store.Get(key)
-	if l.PostStoreFn != nil {
-		val, err = l.PostStoreFn(val, err)
-	}
-	// ensure that one of 'val' or 'err' is nil
 	if err != nil {
 		val = nil
 	} else if val == nil {
