@@ -3,7 +3,6 @@ language: go
 go:
   - 1.5
   - 1.6
-  - tip
 
 install:
   - make tools
@@ -11,3 +10,7 @@ install:
 
 script:
   - make test
+
+after_script:
+  - go get github.com/mattn/goveralls
+  - goveralls -coverprofile=lru.coverprofile -service=travis-ci
