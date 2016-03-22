@@ -331,20 +331,20 @@ var _ = Describe("LRU", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
 			for i := 0; i < 3; i++ {
-				err := l.put([]byte(strconv.Itoa(i)), make([]byte, 120))
+				err := l.put([]byte(strconv.Itoa(i)), make([]byte, 240))
 				Ω(err).ShouldNot(HaveOccurred())
 			}
 
-			l.addItem([]byte("3"), 125)
+			l.put([]byte("3"), make([]byte, 300))
 			Ω(l.puts).Should(Equal(int64(4)))
-			Ω(l.bput).Should(Equal(int64(485)))
-			Ω(l.lru.len()).Should(Equal(int64(2)))
-			Ω(l.lru.lruWarm.list.Len()).Should(Equal(2))
-			Ω(string(l.lru.lruWarm.list.Front().Value.(*listItem).key)).Should(Equal("3"))
+			Ω(l.bput).Should(Equal(int64(1020)))
+			Ω(l.lru.len()).Should(Equal(int64(3)))
 			v := l.getFromBolt([]byte("0"))
 			Ω(v).Should(BeNil())
-			v = l.getFromBolt([]byte("1"))
-			Ω(v).Should(BeNil())
+			for i := 1; i < 4; i++ {
+				v := l.getFromBolt([]byte(strconv.Itoa(i)))
+				Ω(v).ShouldNot(BeNil())
+			}
 		})
 	})
 })

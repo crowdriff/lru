@@ -164,18 +164,14 @@ func (l *LRU) Empty() error {
 // and returns -1.
 func (l *LRU) hit(key []byte) int64 {
 	l.mu.Lock()
-	evict, size := l.lru.getAndEvict(key)
-	if size < 0 {
-		l.misses++
-	} else {
+	defer l.mu.Unlock()
+	if size := l.lru.get(key); size >= 0 {
 		l.hits++
 		l.bget += size
+		return size
 	}
-	l.mu.Unlock()
-	if len(evict) > 0 {
-		go l.deleteFromBolt(evict)
-	}
-	return size
+	l.misses++
+	return -1
 }
 
 // hitToMiss registers that a retrieval attempt previously considered as a

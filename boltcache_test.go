@@ -43,7 +43,7 @@ var _ = Describe("Boltcache", func() {
 			// attempt to open and fill LRU
 			l = newDefaultLRU()
 			defer closeBoltDB(l)
-			Ω(l.lru.items).Should(HaveLen(6))
+			Ω(l.lru.len()).Should(Equal(int64(6)))
 			_, err = l.Get([]byte("6"))
 			Ω(err).Should(MatchError(errNoStore))
 		})
