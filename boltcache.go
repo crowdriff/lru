@@ -32,16 +32,13 @@ func (l *LRU) fillCacheFromBolt() error {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			size := int64(len(v))
-			if l.remain-size < 0 {
+			key := make([]byte, len(k))
+			copy(key, k)
+			if !l.lru.addInitialKey(key, int64(len(v))) {
 				if err := c.Delete(); err != nil {
 					return err
 				}
-				continue
 			}
-			key := make([]byte, len(k))
-			copy(key, k)
-			l.addItemWithMu(key, size)
 		}
 		return nil
 	})
@@ -114,7 +111,7 @@ func (l *LRU) emptyBolt() error {
 // deleteFromBolt deletes the provided slice of keys from the bolt database and
 // returns any error encountered.
 func (l *LRU) deleteFromBolt(keys [][]byte) error {
-	return l.db.Update(func(tx *bolt.Tx) error {
+	return l.db.Batch(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		for _, key := range keys {
 			// ignore a delete error to avoid having the entire transaction fail

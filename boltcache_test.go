@@ -26,7 +26,7 @@ var _ = Describe("Boltcache", func() {
 			defer l.Close()
 			err := l.openBoltDB()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(l.items).Should(HaveLen(0))
+			Ω(l.lru.items).Should(HaveLen(0))
 		})
 
 		It("should fill the cache with all data in the bolt database and delete items exceeding the capacity", func() {
@@ -34,8 +34,8 @@ var _ = Describe("Boltcache", func() {
 			l := NewLRU(1000, "", "", nil)
 			err := l.Open()
 			Ω(err).ShouldNot(HaveOccurred())
-			for i := 0; i < 3; i++ {
-				err = l.putIntoBolt([]byte(strconv.Itoa(i)), make([]byte, 400))
+			for i := 0; i < 7; i++ {
+				err = l.putIntoBolt([]byte(strconv.Itoa(i)), make([]byte, 150))
 				Ω(err).ShouldNot(HaveOccurred())
 			}
 			closeBoltDB(l)
@@ -43,8 +43,8 @@ var _ = Describe("Boltcache", func() {
 			// attempt to open and fill LRU
 			l = newDefaultLRU()
 			defer closeBoltDB(l)
-			Ω(l.items).Should(HaveLen(2))
-			_, err = l.Get([]byte("3"))
+			Ω(l.lru.items).Should(HaveLen(6))
+			_, err = l.Get([]byte("6"))
 			Ω(err).Should(MatchError(errNoStore))
 		})
 	})

@@ -35,14 +35,15 @@ var _ = Describe("Stats", func() {
 			Ω(s.EvictedBytes).Should(Equal(int64(0)))
 			Ω(s.Size).Should(Equal(int64(600)))
 			Ω(s.Capacity).Should(Equal(int64(1000)))
-			Ω(s.NumItems).Should(Equal(int64(1)))
+			Ω(s.NumItems).Should(Equal(int64(2)))
 		})
 	})
 })
 
 func setTestStats(l *LRU) {
-	l.remain = 400
-	l.items["key"] = &item{}
+	l.lru.lruHot.pushToFront(&listItem{size: 400, key: []byte("1")})
+	l.lru.lruWarm.pushToFront(&listItem{size: 200, key: []byte("2")})
+	l.lru.items["key"] = &listItem{}
 	l.hits = 1
 	l.misses = 2
 	l.bget = 3
@@ -64,5 +65,5 @@ func verifyTestStats(s Stats) {
 	Ω(s.EvictedBytes).Should(Equal(int64(7)))
 	Ω(s.Size).Should(Equal(int64(600)))
 	Ω(s.Capacity).Should(Equal(int64(1000)))
-	Ω(s.NumItems).Should(Equal(int64(1)))
+	Ω(s.NumItems).Should(Equal(int64(2)))
 }

@@ -58,8 +58,8 @@ func (l *LRU) getStats() Stats {
 		PutBytes:     l.bput,
 		Evicted:      l.evicted,
 		EvictedBytes: l.bevict,
-		Size:         l.cap - l.remain,
+		Size:         l.lru.size(),
 		Capacity:     l.cap,
-		NumItems:     int64(len(l.items)),
+		NumItems:     l.lru.len(),
 	}
 }
