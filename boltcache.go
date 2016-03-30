@@ -111,7 +111,7 @@ func (l *LRU) emptyBolt() error {
 // deleteFromBolt deletes the provided slice of keys from the bolt database and
 // returns any error encountered.
 func (l *LRU) deleteFromBolt(keys [][]byte) error {
-	return l.db.Batch(func(tx *bolt.Tx) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		for _, key := range keys {
 			// ignore a delete error to avoid having the entire transaction fail
