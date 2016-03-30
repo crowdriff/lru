@@ -77,7 +77,7 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 		store:  store,
 		reqs:   make(map[string]*req),
 		cap:    cap,
-		lru:    newTwoQ(cap, 0.25, 0.5),
+		lru:    newTwoQ(cap, 0.001, 0.25, 0.5),
 		sTime:  time.Now().UTC(),
 	}
 }

@@ -12,7 +12,7 @@ var _ = Describe("Twoq", func() {
 	Context("newTwoQ", func() {
 
 		It("should create a new twoQ LRU with the provided options", func() {
-			tq := newTwoQ(0, -1.0, -1.0)
+			tq := newTwoQ(0, 0.0, -1.0, -1.0)
 			Ω(tq.items).ShouldNot(BeNil())
 			Ω(tq.items).Should(HaveLen(0))
 			Ω(tq.cap).Should(Equal(int64(1000)))
@@ -22,7 +22,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should create a new twoQ LRU with the provided options", func() {
-			tq := newTwoQ(10e6, 1.5, 0.5)
+			tq := newTwoQ(10e6, 0.0, 1.5, 0.5)
 			Ω(tq.items).ShouldNot(BeNil())
 			Ω(tq.items).Should(HaveLen(0))
 			Ω(tq.size()).Should(Equal(int64(0)))
@@ -36,13 +36,13 @@ var _ = Describe("Twoq", func() {
 	Context("get", func() {
 
 		It("should return -1 when the key doesn't exist in the LRU", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			size := tq.get([]byte("key"))
 			Ω(size).Should(Equal(int64(-1)))
 		})
 
 		It("should return an item from the warm LRU", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			evicted := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(1))
@@ -55,7 +55,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should return an item from the hot LRU", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
 				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
 				Ω(evicted).Should(HaveLen(0))
@@ -75,7 +75,7 @@ var _ = Describe("Twoq", func() {
 	Context("putAndEvict", func() {
 
 		It("should insert a new item", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			evicted := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(1))
@@ -83,7 +83,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should insert an item into hot from the cold LRU", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			evicted := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
 			i := tq.items["key"]
@@ -99,7 +99,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should insert an item into hot from the warm LRU", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			evicted := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
 
@@ -112,7 +112,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should move a hot item to the front of the list", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 2; i++ {
 				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
 				Ω(evicted).Should(HaveLen(0))
@@ -135,7 +135,7 @@ var _ = Describe("Twoq", func() {
 	Context("prune", func() {
 
 		It("should prune from the warm lru", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
 				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
 				Ω(evicted).Should(HaveLen(0))
@@ -148,7 +148,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should prune from the hot lru", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
 				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
 				Ω(evicted).Should(HaveLen(0))
@@ -169,7 +169,7 @@ var _ = Describe("Twoq", func() {
 	Context("pruneCold", func() {
 
 		It("should prune nothing from the cold lru", func() {
-			tq := newTwoQ(0, 0.25, 0.0)
+			tq := newTwoQ(0, 0.0, 0.25, 0.0)
 			tq.lruCold.size = 100
 			Ω(tq.lruCold.list.Len()).Should(Equal(0))
 			tq.pruneCold()
@@ -177,7 +177,7 @@ var _ = Describe("Twoq", func() {
 		})
 
 		It("should prune from the cold lru", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 4; i++ {
 				itm := &listItem{
 					key:  []byte(strconv.Itoa(i)),
@@ -196,7 +196,7 @@ var _ = Describe("Twoq", func() {
 	Context("evict", func() {
 
 		It("should return nil when the list is empty", func() {
-			tq := newTwoQ(0, 0.25, 0.5)
+			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			tq.lruHot.size = 1200
 			evicted := tq.lruHot.evict()
 			Ω(evicted).Should(HaveLen(0))
