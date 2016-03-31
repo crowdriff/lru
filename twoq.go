@@ -2,10 +2,10 @@ package lru
 
 import "container/list"
 
-// twoQ is an implementation of the 2Q LRU algorithm, as defined by Theodore
+// TwoQ is an implementation of the 2Q LRU algorithm, as defined by Theodore
 // Johnson and Dennis Shasha: http://www.vldb.org/conf/1994/P439.PDF
 //
-// The twoQ struct consists of a master item map, the total capacity in bytes,
+// The TwoQ struct consists of a master item map, the total capacity in bytes,
 // and three basic LRUs. The hot LRU is the "frequently accessed" LRU, which
 // contains items that have been requested more than once. The warm LRU is the
 // "recently accessed" LRU, which contains items that have been requested only
@@ -28,24 +28,29 @@ import "container/list"
 // Otherwise, the warm LRU is pruned if its size exceeds its capacity. If the
 // warm LRU is under its capacity, the hot LRU is pruned. During pruning, items
 // are removed from the back of the LRU and their keys are returned.
-type twoQ struct {
+type TwoQ struct {
 	items    map[string]*listItem // map of all items (hot + warm + cold)
 	cap      int64                // total capacity of the LRU in bytes
 	pruneCap int64                // total capacity when pruning
 
-	lruHot  *lruList // LRU for frequently requested items
-	lruWarm *lruList // LRU for items requested only once
-	lruCold *lruList // LRU for recently evicted items
+	lruHot  *twoQList // LRU for frequently requested items
+	lruWarm *twoQList // LRU for items requested only once
+	lruCold *twoQList // LRU for recently evicted items
 }
 
 // twoQ LRU item statuses
 const (
-	hot = iota
-	warm
-	cold
+	twoQHot = iota
+	twoQWarm
+	twoQCold
 )
 
-// newTwoQ returns a new twoQ instance given the provided capacity, eviction
+// DefaultTwoQ returns a new TwoQ LRU with the provided capacity.
+func DefaultTwoQ(cap int64) *TwoQ {
+	return NewTwoQ(cap, 0.001, 0.25, 0.5)
+}
+
+// NewTwoQ returns a new TwoQ instance given the provided capacity, eviction
 // ratio, warm/hot ratio, and cold ratio.
 //
 // evictRatio represents the percentage of items (based on size) that should be
@@ -55,7 +60,7 @@ const (
 // are being evicted.
 // coldRatio is a percentage representing the number of items (based on size)
 // that should be kept in the cold LRU compared to the total capacity.
-func newTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *twoQ {
+func NewTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *TwoQ {
 	// capacity should be at least 1000 bytes
 	if cap < 1000 {
 		cap = 1000
@@ -83,14 +88,14 @@ func newTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *twoQ {
 	coldCap := int64(coldRatio * float64(cap))
 	warmCap := int64(warmHotRatio * float64(cap))
 	hotCap := cap - warmCap
-	tq := &twoQ{
+	tq := &TwoQ{
 		items:    make(map[string]*listItem, 10e3),
 		cap:      cap,
 		pruneCap: pruneCap,
 	}
-	tq.lruCold = newList(cold, evictRatio, coldCap, tq)
-	tq.lruWarm = newList(warm, evictRatio, warmCap, tq)
-	tq.lruHot = newList(hot, evictRatio, hotCap, tq)
+	tq.lruCold = newList(twoQCold, evictRatio, coldCap, tq)
+	tq.lruWarm = newList(twoQWarm, evictRatio, warmCap, tq)
+	tq.lruHot = newList(twoQHot, evictRatio, hotCap, tq)
 	return tq
 }
 
@@ -102,16 +107,16 @@ type listItem struct {
 	elem   *list.Element // the item's linked list element
 }
 
-// get returns the size of the value corresponding to the provided key, or -1
+// Get returns the size of the value corresponding to the provided key, or -1
 // if the key doesn't exist in the LRU.
-func (tq *twoQ) get(key []byte) int64 {
+func (tq *TwoQ) Get(key []byte) int64 {
 	if i, ok := tq.items[string(key)]; ok {
 		switch i.status {
-		case hot:
+		case twoQHot:
 			// item is in the hot LRU, move it to the front
 			tq.lruHot.list.MoveToFront(i.elem)
 			return i.size
-		case warm:
+		case twoQWarm:
 			// item is in the warm LRU, move it to the hot LRU
 			tq.lruWarm.removeElem(i.elem)
 			tq.lruHot.pushToFront(i)
@@ -122,23 +127,23 @@ func (tq *twoQ) get(key []byte) int64 {
 	return -1
 }
 
-// putAndEvict inserts the provided key and value size into the LRU and returns
-// a slice of keys that have been evicted.
-func (tq *twoQ) putAndEvict(key []byte, size int64) ([][]byte, int64) {
+// PutAndEvict inserts the provided key and value size into the LRU and returns
+// a slice of keys that have been evicted and total bytes evicted.
+func (tq *TwoQ) PutAndEvict(key []byte, size int64) ([][]byte, int64) {
 	keyStr := string(key)
 	if i, ok := tq.items[keyStr]; ok {
 		i.size = size // update the item's size
 		switch i.status {
-		case hot:
+		case twoQHot:
 			// item is already in the hot LRU, move it to the front
 			tq.lruHot.list.MoveToFront(i.elem)
 			return nil, 0
-		case warm:
+		case twoQWarm:
 			// item is already in the warm LRU, move it to the hot LRU
 			tq.lruWarm.removeElem(i.elem)
 			tq.lruHot.pushToFront(i)
 			return nil, 0
-		case cold:
+		case twoQCold:
 			// item is in the cold LRU, move it to the hot LRU and then prune
 			tq.lruCold.removeElem(i.elem)
 			tq.lruHot.pushToFront(i)
@@ -148,7 +153,7 @@ func (tq *twoQ) putAndEvict(key []byte, size int64) ([][]byte, int64) {
 	// insert the new item into the LRU and then prune it
 	i := &listItem{
 		key:    key,
-		status: warm,
+		status: twoQWarm,
 		size:   size,
 	}
 	tq.lruWarm.pushToFront(i)
@@ -156,34 +161,39 @@ func (tq *twoQ) putAndEvict(key []byte, size int64) ([][]byte, int64) {
 	return tq.prune()
 }
 
-// len returns the number of items in the LRU.
-func (tq *twoQ) len() int64 {
+// Cap returns the total capacity of the LRU in bytes.
+func (tq *TwoQ) Cap() int64 {
+	return tq.cap
+}
+
+// Len returns the number of items in the LRU.
+func (tq *TwoQ) Len() int64 {
 	return int64(tq.lruHot.list.Len() + tq.lruWarm.list.Len())
 }
 
-// size returns the total number of bytes in the LRU.
-func (tq *twoQ) size() int64 {
+// Size returns the total number of bytes in the LRU.
+func (tq *TwoQ) Size() int64 {
 	return tq.lruHot.size + tq.lruWarm.size
 }
 
-// empty empties all internal lists.
-func (tq *twoQ) empty() {
+// Empty empties all internal lists.
+func (tq *TwoQ) Empty() {
 	tq.items = make(map[string]*listItem)
 	tq.lruCold.empty()
 	tq.lruWarm.empty()
 	tq.lruHot.empty()
 }
 
-// addInitialKey adds the provided key and value size into the LRU as an initial
+// PutOnStartup adds the provided key and value size into the LRU as an initial
 // item. All items are inserted into the warm LRU until full, where items begin
 // to be inserted into the cold LRU. It returns true if the item was inserted
 // into the warm LRU successfully.
-func (tq *twoQ) addInitialKey(key []byte, size int64) bool {
+func (tq *TwoQ) PutOnStartup(key []byte, size int64) bool {
 	i := &listItem{
 		key:  key,
 		size: size,
 	}
-	if tq.size()+size <= tq.cap {
+	if tq.Size()+size <= tq.cap {
 		tq.lruWarm.pushToFront(i)
 		tq.items[string(key)] = i
 		return true
@@ -195,15 +205,11 @@ func (tq *twoQ) addInitialKey(key []byte, size int64) bool {
 	return false
 }
 
-//
-// The following methods are for internal (to this file) use only!
-//
-
 // prune prunes any excess items off of the back of the warm LRU, or if under
 // the warm/hot ratio, the hot LRU, and returns a slice of keys that have been
 // evicted and the total bytes evicted.
-func (tq *twoQ) prune() ([][]byte, int64) {
-	if tq.size() <= tq.cap {
+func (tq *TwoQ) prune() ([][]byte, int64) {
+	if tq.Size() <= tq.cap {
 		return nil, 0
 	}
 	eWarm, wbytes := tq.lruWarm.evict()
@@ -213,7 +219,7 @@ func (tq *twoQ) prune() ([][]byte, int64) {
 }
 
 // pruneCold prunes any excess items off of the back of the cold LRU.
-func (tq *twoQ) pruneCold() {
+func (tq *TwoQ) pruneCold() {
 	// ignore pruneCap, prune to its total capacity
 	for tq.lruCold.size > tq.lruCold.cap {
 		tail := tq.lruCold.list.Back()
@@ -225,20 +231,20 @@ func (tq *twoQ) pruneCold() {
 	}
 }
 
-// lruList represents a basic LRU.
-type lruList struct {
+// twoQList represents a basic LRU.
+type twoQList struct {
 	list     *list.List // eviction list
 	status   uint8      // the list's status (i.e. hot, warm, cold)
 	size     int64      // the current size of the list in bytes
 	cap      int64      // the list's maximum capacity
 	pruneCap int64      // the maximum capacity when pruning
-	twoQ     *twoQ      // the associated twoQ LRU
+	twoQ     *TwoQ      // the associated TwoQ LRU
 }
 
-// newList returns a new lruList with the provided status, capacity, and twoQ
+// newList returns a new twoQList with the provided status, capacity, and twoQ
 // LRU.
-func newList(status uint8, pruneRatio float64, cap int64, twoQ *twoQ) *lruList {
-	return &lruList{
+func newList(status uint8, pruneRatio float64, cap int64, twoQ *TwoQ) *twoQList {
+	return &twoQList{
 		list:     list.New(),
 		status:   status,
 		cap:      cap,
@@ -248,13 +254,13 @@ func newList(status uint8, pruneRatio float64, cap int64, twoQ *twoQ) *lruList {
 }
 
 // empty empties the list's underlying linked list and size.
-func (ll *lruList) empty() {
+func (ll *twoQList) empty() {
 	ll.list = list.New()
 	ll.size = 0
 }
 
 // pushToFront inserts the provided item into the front of the list.
-func (ll *lruList) pushToFront(i *listItem) {
+func (ll *twoQList) pushToFront(i *listItem) {
 	i.elem = ll.list.PushFront(i)
 	ll.size += i.size
 	i.status = ll.status
@@ -262,7 +268,7 @@ func (ll *lruList) pushToFront(i *listItem) {
 
 // removeElem removes the provided list element from the linked list and returns
 // the associated item.
-func (ll *lruList) removeElem(elem *list.Element) *listItem {
+func (ll *twoQList) removeElem(elem *list.Element) *listItem {
 	i := ll.list.Remove(elem).(*listItem)
 	ll.size -= i.size
 	return i
@@ -271,10 +277,10 @@ func (ll *lruList) removeElem(elem *list.Element) *listItem {
 // evict evicts items from the list until the twoQ LRU's size is less than or
 // equal to its capacity. It returns a slice of keys that have been evicted and
 // the total bytes evicted.
-func (ll *lruList) evict() ([][]byte, int64) {
+func (ll *twoQList) evict() ([][]byte, int64) {
 	var bevicted int64
 	var evicted [][]byte
-	for ll.twoQ.size() > ll.twoQ.pruneCap && ll.size > ll.pruneCap {
+	for ll.twoQ.Size() > ll.twoQ.pruneCap && ll.size > ll.pruneCap {
 		tail := ll.list.Back()
 		if tail == nil {
 			return evicted, bevicted

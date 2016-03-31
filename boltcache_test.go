@@ -12,7 +12,7 @@ var _ = Describe("Boltcache", func() {
 	Context("openBoltDB", func() {
 
 		It("should return an error when attempting to open an invalid path", func() {
-			l := NewLRU(0, "///", "", nil)
+			l := NewLRU("///", "", nil, nil)
 			defer closeBoltDB(l)
 			err := l.openBoltDB()
 			Ω(err).Should(HaveOccurred())
@@ -22,25 +22,25 @@ var _ = Describe("Boltcache", func() {
 	Context("fillCacheFromBolt", func() {
 
 		It("should attempt to fill the cache, but no data currently exists", func() {
-			l := NewLRU(0, "", "", nil)
+			l := NewLRU("", "", nil, nil)
 			defer l.Close()
 			err := l.openBoltDB()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(l.lru.items).Should(HaveLen(0))
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
 		})
 
 		It("should return an error when a blank bucket name is used", func() {
-			l := NewLRU(0, "", "", nil)
+			l := NewLRU("", "", nil, nil)
 			defer l.Close()
 			l.bName = []byte{}
 			err := l.openBoltDB()
 			Ω(err).Should(HaveOccurred())
-			Ω(l.lru.items).Should(HaveLen(0))
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
 		})
 
 		It("should fill the cache with all data in the bolt database and delete items exceeding the capacity", func() {
 			// insert 1200 bytes into the bolt database
-			l := NewLRU(1000, "", "", nil)
+			l := NewLRU("", "", DefaultTwoQ(1000), nil)
 			err := l.Open()
 			Ω(err).ShouldNot(HaveOccurred())
 			for i := 0; i < 7; i++ {
@@ -52,7 +52,7 @@ var _ = Describe("Boltcache", func() {
 			// attempt to open and fill LRU
 			l = newDefaultLRU()
 			defer closeBoltDB(l)
-			Ω(l.lru.len()).Should(Equal(int64(6)))
+			Ω(l.lru.Len()).Should(Equal(int64(6)))
 			_, err = l.Get([]byte("6"))
 			Ω(err).Should(MatchError(errNoStore))
 		})

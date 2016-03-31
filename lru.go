@@ -23,14 +23,11 @@ type LRU struct {
 	muReqs sync.Mutex      // mutex protecting the reqs map
 	reqs   map[string]*req // map of current remote store requests
 
-	// maximum cache capacity in bytes
-	cap int64
-
 	// mutex protecting everything below
 	mu sync.Mutex
 
-	// internal twoQ LRU
-	lru *twoQ
+	// internal LRU algorithm
+	lru Algorithm
 
 	// cache stats
 	sTime    time.Time // starting time
@@ -53,11 +50,7 @@ type req struct {
 // NewLRU returns a new LRU object with the provided capacity, database path,
 // db bucket name, and remote store. Before using the returned LRU, its Open
 // method must be called first.
-func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
-	// minimum capacity is 1000 bytes
-	if cap < 1000 {
-		cap = 1000
-	}
+func NewLRU(dbPath, bName string, alg Algorithm, store Store) *LRU {
 	// assign a default database path of "/tmp/lru.db"
 	if dbPath == "" {
 		dbPath = "/tmp/lru.db"
@@ -65,6 +58,11 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 	// assign a default bucket name of "lru"
 	if bName == "" {
 		bName = "lru"
+	}
+	// assign the default TwoQ LRU with a capacity of 1GB if no lru
+	// algorithm provided
+	if alg == nil {
+		alg = DefaultTwoQ(1e9)
 	}
 	// assign nostore if no store is provided
 	if store == nil {
@@ -76,8 +74,7 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 		bName:  []byte(bName),
 		store:  store,
 		reqs:   make(map[string]*req),
-		cap:    cap,
-		lru:    newTwoQ(cap, 0.001, 0.25, 0.5),
+		lru:    alg,
 		sTime:  time.Now().UTC(),
 	}
 }
@@ -106,7 +103,7 @@ func (l *LRU) Close() error {
 // be used after calling this method.
 func (l *LRU) close() error {
 	l.mu.Lock()
-	l.lru.empty()
+	l.lru.Empty()
 	l.mu.Unlock()
 	return l.db.Close()
 }
@@ -154,7 +151,7 @@ func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
 // Empty completely empties the cache and underlying bolt database.
 func (l *LRU) Empty() error {
 	l.mu.Lock()
-	l.lru.empty()
+	l.lru.Empty()
 	l.mu.Unlock()
 	return l.emptyBolt()
 }
@@ -165,7 +162,7 @@ func (l *LRU) Empty() error {
 func (l *LRU) hit(key []byte) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if size := l.lru.get(key); size >= 0 {
+	if size := l.lru.Get(key); size >= 0 {
 		l.hits++
 		l.bget += size
 		return size
@@ -272,7 +269,7 @@ func (l *LRU) put(key, val []byte) error {
 // that have been pruned, they will be deleted from the bolt database.
 func (l *LRU) addItem(key []byte, size int64) {
 	l.mu.Lock()
-	evicted, bytes := l.lru.putAndEvict(key, size)
+	evicted, bytes := l.lru.PutAndEvict(key, size)
 	l.puts++
 	l.bput += size
 	if len(evicted) > 0 {

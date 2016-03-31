@@ -41,9 +41,8 @@ var _ = Describe("Stats", func() {
 })
 
 func setTestStats(l *LRU) {
-	l.lru.lruHot.pushToFront(&listItem{size: 400, key: []byte("1")})
-	l.lru.lruWarm.pushToFront(&listItem{size: 200, key: []byte("2")})
-	l.lru.items["key"] = &listItem{}
+	l.lru.PutOnStartup([]byte("1"), 400)
+	l.lru.PutOnStartup([]byte("2"), 200)
 	l.hits = 1
 	l.misses = 2
 	l.bget = 3

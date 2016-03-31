@@ -34,7 +34,7 @@ func (l *LRU) fillCacheFromBolt() error {
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			key := make([]byte, len(k))
 			copy(key, k)
-			if !l.lru.addInitialKey(key, int64(len(v))) {
+			if !l.lru.PutOnStartup(key, int64(len(v))) {
 				// avoid rolling back the entire transaction
 				// for a single delete failure
 				_ = c.Delete()

@@ -13,13 +13,13 @@ import (
 
 var _ = Describe("LRU", func() {
 
-	Context("NetLRU", func() {
+	Context("NewLRU", func() {
 
 		It("should return an LRU with the default values set", func() {
-			l := NewLRU(0, "", "", nil)
+			l := NewLRU("", "", DefaultTwoQ(0), nil)
 			defer closeBoltDB(l)
-			Ω(int(l.cap)).Should(Equal(1000))
-			Ω(int(l.lru.lruHot.size + l.lru.lruWarm.size)).Should(Equal(0))
+			Ω(l.lru.Cap()).Should(Equal(int64(1000)))
+			Ω(l.lru.Size()).Should(Equal(int64(0)))
 			Ω(l.dbPath).Should(Equal("/tmp/lru.db"))
 			Ω(string(l.bName)).Should(Equal("lru"))
 			Ω(l.store).ShouldNot(BeNil())
@@ -29,10 +29,11 @@ var _ = Describe("LRU", func() {
 
 		It("should return an LRU with the custom values set", func() {
 			s := &errStore{}
-			l := NewLRU(10e6, "dbPath", "bName", s)
+			l := NewLRU("dbPath", "bName", DefaultTwoQ(10e6), s)
 			defer closeBoltDB(l)
-			Ω(l.cap).Should(Equal(int64(10e6)))
-			Ω(l.lru.lruHot.cap + l.lru.lruWarm.cap).Should(Equal(int64(10e6)))
+			Ω(l.lru.Cap()).Should(Equal(int64(10e6)))
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
+			Ω(l.lru.Size()).Should(Equal(int64(0)))
 			Ω(l.dbPath).Should(Equal("dbPath"))
 			Ω(string(l.bName)).Should(Equal("bName"))
 			Ω(l.store).Should(Equal(s))
@@ -44,7 +45,7 @@ var _ = Describe("LRU", func() {
 	Context("Open", func() {
 
 		It("should return an error when opening", func() {
-			l := NewLRU(0, "", "", &errStore{})
+			l := NewLRU("", "", nil, &errStore{})
 			defer closeBoltDB(l)
 			err := l.Open()
 			Ω(err).Should(HaveOccurred())
@@ -52,7 +53,7 @@ var _ = Describe("LRU", func() {
 		})
 
 		It("should open the bolt database successfully", func() {
-			l := NewLRU(0, "", "", nil)
+			l := NewLRU("", "", nil, nil)
 			defer closeBoltDB(l)
 			err := l.Open()
 			Ω(err).ShouldNot(HaveOccurred())
@@ -120,7 +121,7 @@ var _ = Describe("LRU", func() {
 		It("should return an error from the remote store if it hits the LRU but isn't found in the database", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
-			l.lru.putAndEvict([]byte("key"), 400)
+			l.lru.PutAndEvict([]byte("key"), 400)
 			_, err := l.Get([]byte("key"))
 			Ω(err).Should(HaveOccurred())
 			Ω(err.Error()).Should(Equal("no remote store available"))
@@ -174,7 +175,7 @@ var _ = Describe("LRU", func() {
 		It("should return an error from the remote store if it hits the LRU but isn't found in the database", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
-			l.lru.putAndEvict([]byte("key"), 400)
+			l.lru.PutAndEvict([]byte("key"), 400)
 			_, err := l.GetWriterTo([]byte("key"))
 			Ω(err).Should(HaveOccurred())
 			Ω(err.Error()).Should(Equal("no remote store available"))
@@ -218,12 +219,10 @@ var _ = Describe("LRU", func() {
 				err := l.put([]byte(strconv.Itoa(i)), []byte("value"))
 				Ω(err).ShouldNot(HaveOccurred())
 			}
-			Ω(l.lru.items).Should(HaveLen(4))
+			Ω(l.lru.Len()).Should(Equal(int64(4)))
 			err := l.Empty()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(l.lru.items).Should(HaveLen(0))
-			Ω(l.lru.lruHot.list.Len()).Should(Equal(0))
-			Ω(l.lru.lruWarm.list.Len()).Should(Equal(0))
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
 			for i := 0; i < 4; i++ {
 				val := l.getFromBolt([]byte(strconv.Itoa(i)))
 				Ω(val).Should(BeNil())
@@ -338,7 +337,7 @@ var _ = Describe("LRU", func() {
 			l.put([]byte("3"), make([]byte, 300))
 			Ω(l.puts).Should(Equal(int64(4)))
 			Ω(l.bput).Should(Equal(int64(1020)))
-			Ω(l.lru.len()).Should(Equal(int64(3)))
+			Ω(l.lru.Len()).Should(Equal(int64(3)))
 			v := l.getFromBolt([]byte("0"))
 			Ω(v).Should(BeNil())
 			for i := 1; i < 4; i++ {
