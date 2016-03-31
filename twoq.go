@@ -29,7 +29,7 @@ import "container/list"
 // warm LRU is under its capacity, the hot LRU is pruned. During pruning, items
 // are removed from the back of the LRU and their keys are returned.
 type TwoQ struct {
-	items    map[string]*listItem // map of all items (hot + warm + cold)
+	items    map[string]*twoQItem // map of all items (hot + warm + cold)
 	cap      int64                // total capacity of the LRU in bytes
 	pruneCap int64                // total capacity when pruning
 
@@ -68,15 +68,13 @@ func NewTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *TwoQ {
 	// evict ratio must be between 0.0 & 1.0
 	if evictRatio < 0.0 {
 		evictRatio = 0.0
-	}
-	if evictRatio > 1.0 {
+	} else if evictRatio > 1.0 {
 		evictRatio = 1.0
 	}
 	// warm/hot ratio must be between 0.0 & 1.0
 	if warmHotRatio < 0.0 {
 		warmHotRatio = 0.0
-	}
-	if warmHotRatio > 1.0 {
+	} else if warmHotRatio > 1.0 {
 		warmHotRatio = 1.0
 	}
 	// cold ratio must be at least 0.0
@@ -89,7 +87,7 @@ func NewTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *TwoQ {
 	warmCap := int64(warmHotRatio * float64(cap))
 	hotCap := cap - warmCap
 	tq := &TwoQ{
-		items:    make(map[string]*listItem, 10e3),
+		items:    make(map[string]*twoQItem, 1e4),
 		cap:      cap,
 		pruneCap: pruneCap,
 	}
@@ -99,8 +97,8 @@ func NewTwoQ(cap int64, evictRatio, warmHotRatio, coldRatio float64) *TwoQ {
 	return tq
 }
 
-// listItem represents a single item in the LRU.
-type listItem struct {
+// twoQItem represents a single item in the LRU.
+type twoQItem struct {
 	key    []byte        // the item's key
 	status uint8         // the item's status (i.e. hot, warm, cold)
 	size   int64         // size of the item's value in bytes
@@ -132,26 +130,29 @@ func (tq *TwoQ) Get(key []byte) int64 {
 func (tq *TwoQ) PutAndEvict(key []byte, size int64) ([][]byte, int64) {
 	keyStr := string(key)
 	if i, ok := tq.items[keyStr]; ok {
-		i.size = size // update the item's size
 		switch i.status {
 		case twoQHot:
 			// item is already in the hot LRU, move it to the front
+			tq.lruHot.size += (size - i.size)
+			i.size = size
 			tq.lruHot.list.MoveToFront(i.elem)
-			return nil, 0
+			return tq.prune()
 		case twoQWarm:
 			// item is already in the warm LRU, move it to the hot LRU
 			tq.lruWarm.removeElem(i.elem)
+			i.size = size
 			tq.lruHot.pushToFront(i)
-			return nil, 0
+			return tq.prune()
 		case twoQCold:
 			// item is in the cold LRU, move it to the hot LRU and then prune
 			tq.lruCold.removeElem(i.elem)
+			i.size = size
 			tq.lruHot.pushToFront(i)
 			return tq.prune()
 		}
 	}
 	// insert the new item into the LRU and then prune it
-	i := &listItem{
+	i := &twoQItem{
 		key:    key,
 		status: twoQWarm,
 		size:   size,
@@ -178,7 +179,7 @@ func (tq *TwoQ) Size() int64 {
 
 // Empty empties all internal lists.
 func (tq *TwoQ) Empty() {
-	tq.items = make(map[string]*listItem)
+	tq.items = make(map[string]*twoQItem)
 	tq.lruCold.empty()
 	tq.lruWarm.empty()
 	tq.lruHot.empty()
@@ -189,7 +190,7 @@ func (tq *TwoQ) Empty() {
 // to be inserted into the cold LRU. It returns true if the item was inserted
 // into the warm LRU successfully.
 func (tq *TwoQ) PutOnStartup(key []byte, size int64) bool {
-	i := &listItem{
+	i := &twoQItem{
 		key:  key,
 		size: size,
 	}
@@ -260,7 +261,7 @@ func (ll *twoQList) empty() {
 }
 
 // pushToFront inserts the provided item into the front of the list.
-func (ll *twoQList) pushToFront(i *listItem) {
+func (ll *twoQList) pushToFront(i *twoQItem) {
 	i.elem = ll.list.PushFront(i)
 	ll.size += i.size
 	i.status = ll.status
@@ -268,8 +269,8 @@ func (ll *twoQList) pushToFront(i *listItem) {
 
 // removeElem removes the provided list element from the linked list and returns
 // the associated item.
-func (ll *twoQList) removeElem(elem *list.Element) *listItem {
-	i := ll.list.Remove(elem).(*listItem)
+func (ll *twoQList) removeElem(elem *list.Element) *twoQItem {
+	i := ll.list.Remove(elem).(*twoQItem)
 	ll.size -= i.size
 	return i
 }

@@ -158,21 +158,21 @@ var _ = Describe("Twoq", func() {
 
 		It("should completely empty the LRU", func() {
 			tq := DefaultTwoQ(0)
-			iCold := &listItem{
+			iCold := &twoQItem{
 				key:    []byte("1"),
 				status: twoQCold,
 				size:   10,
 			}
 			tq.lruCold.pushToFront(iCold)
 			tq.items["1"] = iCold
-			iWarm := &listItem{
+			iWarm := &twoQItem{
 				key:    []byte("2"),
 				status: twoQWarm,
 				size:   10,
 			}
 			tq.lruWarm.pushToFront(iWarm)
 			tq.items["2"] = iWarm
-			iHot := &listItem{
+			iHot := &twoQItem{
 				key:    []byte("3"),
 				status: twoQHot,
 				size:   10,
@@ -259,7 +259,7 @@ var _ = Describe("Twoq", func() {
 		It("should prune from the cold lru", func() {
 			tq := NewTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 4; i++ {
-				itm := &listItem{
+				itm := &twoQItem{
 					key:  []byte(strconv.Itoa(i)),
 					size: 150,
 				}
