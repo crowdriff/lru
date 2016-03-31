@@ -6,18 +6,17 @@ import (
 
 // Stats contains a number of stats pertaining to an LRU.
 type Stats struct {
-	StartTime    time.Time     `json:"start_time"`
-	Uptime       time.Duration `json:"uptime"`
-	Hits         int64         `json:"hits"`
-	Misses       int64         `json:"misses"`
-	GetBytes     int64         `json:"get_bytes"`
-	Puts         int64         `json:"puts"`
-	PutBytes     int64         `json:"put_bytes"`
-	Evicted      int64         `json:"evicted"`
-	EvictedBytes int64         `json:"evicted_bytes"`
-	Size         int64         `json:"size"`
-	Capacity     int64         `json:"capacity"`
-	NumItems     int64         `json:"num_items"`
+	StartTime time.Time     `json:"start_time"`
+	Uptime    time.Duration `json:"uptime"`
+	Hits      int64         `json:"hits"`
+	Misses    int64         `json:"misses"`
+	GetBytes  int64         `json:"get_bytes"`
+	Puts      int64         `json:"puts"`
+	PutBytes  int64         `json:"put_bytes"`
+	Evicted   int64         `json:"evicted"`
+	Size      int64         `json:"size"`
+	Capacity  int64         `json:"capacity"`
+	NumItems  int64         `json:"num_items"`
 }
 
 // Stats returns the current stats for the given LRU.
@@ -40,7 +39,6 @@ func (l *LRU) ResetStats() Stats {
 	l.puts = 0
 	l.bput = 0
 	l.evicted = 0
-	l.bevict = 0
 	l.mu.Unlock()
 	return stats
 }
@@ -49,17 +47,16 @@ func (l *LRU) ResetStats() Stats {
 // Note: this method should only be called when the LRU mutex is locked!
 func (l *LRU) getStats() Stats {
 	return Stats{
-		StartTime:    l.sTime,
-		Uptime:       time.Since(l.sTime),
-		Hits:         l.hits,
-		Misses:       l.misses,
-		GetBytes:     l.bget,
-		Puts:         l.puts,
-		PutBytes:     l.bput,
-		Evicted:      l.evicted,
-		EvictedBytes: l.bevict,
-		Size:         l.lru.size(),
-		Capacity:     l.cap,
-		NumItems:     l.lru.len(),
+		StartTime: l.sTime,
+		Uptime:    time.Since(l.sTime),
+		Hits:      l.hits,
+		Misses:    l.misses,
+		GetBytes:  l.bget,
+		Puts:      l.puts,
+		PutBytes:  l.bput,
+		Evicted:   l.evicted,
+		Size:      l.lru.size(),
+		Capacity:  l.cap,
+		NumItems:  l.lru.len(),
 	}
 }

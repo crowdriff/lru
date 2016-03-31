@@ -40,7 +40,6 @@ type LRU struct {
 	puts    int64     // # of puts completed
 	bput    int64     // # of bytes written
 	evicted int64     // # of items evicted
-	bevict  int64     // # of bytes evicted
 }
 
 // req represents a remote store request.
@@ -275,6 +274,7 @@ func (l *LRU) addItem(key []byte, size int64) {
 	evicted := l.lru.putAndEvict(key, size)
 	l.puts++
 	l.bput += size
+	l.evicted += int64(len(evicted))
 	l.mu.Unlock()
 	if len(evicted) > 0 {
 		l.deleteFromBolt(evicted)
