@@ -29,6 +29,15 @@ var _ = Describe("Boltcache", func() {
 			Ω(l.lru.items).Should(HaveLen(0))
 		})
 
+		It("should return an error when a blank bucket name is used", func() {
+			l := NewLRU(0, "", "", nil)
+			defer l.Close()
+			l.bName = []byte{}
+			err := l.openBoltDB()
+			Ω(err).Should(HaveOccurred())
+			Ω(l.lru.items).Should(HaveLen(0))
+		})
+
 		It("should fill the cache with all data in the bolt database and delete items exceeding the capacity", func() {
 			// insert 1200 bytes into the bolt database
 			l := NewLRU(1000, "", "", nil)
@@ -123,6 +132,14 @@ var _ = Describe("Boltcache", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 			v = l.getFromBolt([]byte("key"))
 			Ω(v).Should(BeNil())
+		})
+
+		It("should return an error when the bucket doesn't exist", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.bName = []byte("badbucketname")
+			err := l.emptyBolt()
+			Ω(err).Should(HaveOccurred())
 		})
 	})
 

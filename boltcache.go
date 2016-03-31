@@ -35,9 +35,9 @@ func (l *LRU) fillCacheFromBolt() error {
 			key := make([]byte, len(k))
 			copy(key, k)
 			if !l.lru.addInitialKey(key, int64(len(v))) {
-				if err := c.Delete(); err != nil {
-					return err
-				}
+				// avoid rolling back the entire transaction
+				// for a single delete failure
+				_ = c.Delete()
 			}
 		}
 		return nil
@@ -75,13 +75,10 @@ func (l *LRU) getBufFromBolt(key []byte) *bytes.Buffer {
 			return nil
 		}
 		buf = getBuf()
-		_, err := buf.Write(v)
-		return err
+		buf.Write(v)
+		return nil
 	})
 	if err != nil {
-		if buf != nil {
-			putBuf(buf)
-		}
 		return nil
 	}
 	return buf
@@ -114,7 +111,8 @@ func (l *LRU) deleteFromBolt(keys [][]byte) error {
 	return l.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(l.bName)
 		for _, key := range keys {
-			// ignore a delete error to avoid having the entire transaction fail
+			// ignore a delete error to avoid having the entire
+			// transaction fail.
 			_ = b.Delete(key)
 		}
 		return nil
