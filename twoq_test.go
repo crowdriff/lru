@@ -12,21 +12,23 @@ var _ = Describe("Twoq", func() {
 	Context("newTwoQ", func() {
 
 		It("should create a new twoQ LRU with the provided options", func() {
-			tq := newTwoQ(0, 0.0, -1.0, -1.0)
+			tq := newTwoQ(0, -1.0, -1.0, -1.0)
 			Ω(tq.items).ShouldNot(BeNil())
 			Ω(tq.items).Should(HaveLen(0))
 			Ω(tq.cap).Should(Equal(int64(1000)))
+			Ω(tq.pruneCap).Should(Equal(tq.cap))
 			Ω(tq.lruHot.cap).Should(Equal(int64(1000)))
 			Ω(tq.lruWarm.cap).Should(Equal(int64(0)))
 			Ω(tq.lruCold.cap).Should(Equal(int64(0)))
 		})
 
 		It("should create a new twoQ LRU with the provided options", func() {
-			tq := newTwoQ(10e6, 0.0, 1.5, 0.5)
+			tq := newTwoQ(10e6, 1.5, 1.5, 0.5)
 			Ω(tq.items).ShouldNot(BeNil())
 			Ω(tq.items).Should(HaveLen(0))
 			Ω(tq.size()).Should(Equal(int64(0)))
 			Ω(tq.cap).Should(Equal(int64(10e6)))
+			Ω(tq.pruneCap).Should(Equal(int64(0)))
 			Ω(tq.lruHot.cap).Should(Equal(int64(0)))
 			Ω(tq.lruWarm.cap).Should(Equal(int64(10e6)))
 			Ω(tq.lruCold.cap).Should(Equal(int64(10e6 / 2)))
