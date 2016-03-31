@@ -12,7 +12,7 @@ var _ = Describe("Boltcache", func() {
 	Context("openBoltDB", func() {
 
 		It("should return an error when attempting to open an invalid path", func() {
-			l := NewLRU(0, "///", "", nil)
+			l := NewLRU("///", "", nil, nil)
 			defer closeBoltDB(l)
 			err := l.openBoltDB()
 			Ω(err).Should(HaveOccurred())
@@ -22,20 +22,29 @@ var _ = Describe("Boltcache", func() {
 	Context("fillCacheFromBolt", func() {
 
 		It("should attempt to fill the cache, but no data currently exists", func() {
-			l := NewLRU(0, "", "", nil)
+			l := NewLRU("", "", nil, nil)
 			defer l.Close()
 			err := l.openBoltDB()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(l.items).Should(HaveLen(0))
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
+		})
+
+		It("should return an error when a blank bucket name is used", func() {
+			l := NewLRU("", "", nil, nil)
+			defer l.Close()
+			l.bName = []byte{}
+			err := l.openBoltDB()
+			Ω(err).Should(HaveOccurred())
+			Ω(l.lru.Len()).Should(Equal(int64(0)))
 		})
 
 		It("should fill the cache with all data in the bolt database and delete items exceeding the capacity", func() {
 			// insert 1200 bytes into the bolt database
-			l := NewLRU(1000, "", "", nil)
+			l := NewLRU("", "", DefaultTwoQ(1000), nil)
 			err := l.Open()
 			Ω(err).ShouldNot(HaveOccurred())
-			for i := 0; i < 3; i++ {
-				err = l.putIntoBolt([]byte(strconv.Itoa(i)), make([]byte, 400))
+			for i := 0; i < 7; i++ {
+				err = l.putIntoBolt([]byte(strconv.Itoa(i)), make([]byte, 150))
 				Ω(err).ShouldNot(HaveOccurred())
 			}
 			closeBoltDB(l)
@@ -43,8 +52,8 @@ var _ = Describe("Boltcache", func() {
 			// attempt to open and fill LRU
 			l = newDefaultLRU()
 			defer closeBoltDB(l)
-			Ω(l.items).Should(HaveLen(2))
-			_, err = l.Get([]byte("3"))
+			Ω(l.lru.Len()).Should(Equal(int64(6)))
+			_, err = l.Get([]byte("6"))
 			Ω(err).Should(MatchError(errNoStore))
 		})
 	})
@@ -123,6 +132,14 @@ var _ = Describe("Boltcache", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 			v = l.getFromBolt([]byte("key"))
 			Ω(v).Should(BeNil())
+		})
+
+		It("should return an error when the bucket doesn't exist", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			l.bName = []byte("badbucketname")
+			err := l.emptyBolt()
+			Ω(err).Should(HaveOccurred())
 		})
 	})
 

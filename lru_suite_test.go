@@ -14,7 +14,7 @@ func TestLru(t *testing.T) {
 }
 
 var _ = BeforeEach(func() {
-	l := NewLRU(0, "", "", nil)
+	l := NewLRU("", "", nil, nil)
 	defer closeBoltDB(l)
 	err := l.Open()
 	Ω(err).ShouldNot(HaveOccurred())
@@ -23,7 +23,7 @@ var _ = BeforeEach(func() {
 })
 
 func newDefaultLRU() *LRU {
-	l := NewLRU(0, "", "", nil)
+	l := NewLRU("", "", DefaultTwoQ(0), nil)
 	err := l.Open()
 	Ω(err).ShouldNot(HaveOccurred())
 	return l

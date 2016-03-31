@@ -1,7 +1,6 @@
 package lru
 
 import (
-	"container/list"
 	"errors"
 	"fmt"
 	"io"
@@ -16,7 +15,7 @@ import (
 type LRU struct {
 	// boltDB cache
 	db     *bolt.DB
-	dbPath string
+	dbPath string // database path
 	bName  []byte // LRU bucket name
 
 	// remote store
@@ -24,36 +23,21 @@ type LRU struct {
 	muReqs sync.Mutex      // mutex protecting the reqs map
 	reqs   map[string]*req // map of current remote store requests
 
-	// total cache capacity
-	cap int64 // maximum capacity in bytes
-
 	// mutex protecting everything below
 	mu sync.Mutex
 
-	// space remaining and prune capacity
-	remain   int64 // space remaining in bytes
-	prunecap int64 // minimum bytes to prune when evicting items (default is 1% of capacity)
-
-	// internal cache objects
-	items map[string]*item // map of all items
-	list  *list.List       // eviction linked list
+	// internal LRU algorithm
+	lru Algorithm
 
 	// cache stats
-	sTime   time.Time // starting time
-	hits    int64     // # of cache hits
-	misses  int64     // # of cache misses
-	bget    int64     // # of bytes retrieved
-	puts    int64     // # of puts completed
-	bput    int64     // # of bytes written
-	evicted int64     // # of items evicted
-	bevict  int64     // # of bytes evicted
-}
-
-// item represents a single item in the eviction list.
-type item struct {
-	key  []byte        // item's key
-	size int64         // size of the item's value in bytes
-	elem *list.Element // linked list pointer
+	sTime    time.Time // starting time
+	hits     int64     // # of cache hits
+	misses   int64     // # of cache misses
+	bget     int64     // # of bytes retrieved
+	puts     int64     // # of puts completed
+	bput     int64     // # of bytes written
+	evicted  int64     // # of items evicted
+	bevicted int64     // # of bytes evicted
 }
 
 // req represents a remote store request.
@@ -66,11 +50,7 @@ type req struct {
 // NewLRU returns a new LRU object with the provided capacity, database path,
 // db bucket name, and remote store. Before using the returned LRU, its Open
 // method must be called first.
-func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
-	// minimum capacity is 1000 bytes
-	if cap < 1000 {
-		cap = 1000
-	}
+func NewLRU(dbPath, bName string, alg Algorithm, store Store) *LRU {
 	// assign a default database path of "/tmp/lru.db"
 	if dbPath == "" {
 		dbPath = "/tmp/lru.db"
@@ -79,24 +59,24 @@ func NewLRU(cap int64, dbPath, bName string, store Store) *LRU {
 	if bName == "" {
 		bName = "lru"
 	}
+	// assign the default TwoQ LRU with a capacity of 1GB if no lru
+	// algorithm provided
+	if alg == nil {
+		alg = DefaultTwoQ(1e9)
+	}
 	// assign nostore if no store is provided
 	if store == nil {
 		store = &noStore{}
 	}
 	// initialize LRU
-	l := &LRU{
+	return &LRU{
 		dbPath: dbPath,
 		bName:  []byte(bName),
 		store:  store,
 		reqs:   make(map[string]*req),
-		cap:    cap,
-		remain: cap,
-		items:  make(map[string]*item, 10e3),
-		list:   list.New(),
+		lru:    alg,
 		sTime:  time.Now().UTC(),
 	}
-	l.SetPrunePct(0.01)
-	return l
 }
 
 // Open opens the LRU's remote store and, if successful, the local bolt
@@ -123,26 +103,9 @@ func (l *LRU) Close() error {
 // be used after calling this method.
 func (l *LRU) close() error {
 	l.mu.Lock()
-	l.list = list.New()
-	l.items = make(map[string]*item)
-	l.remain = l.cap
+	l.lru.Empty()
 	l.mu.Unlock()
 	return l.db.Close()
-}
-
-// SetPrunePct sets the percentage of bytes that are evicted from the LRU when
-// the size exceeds the overall capacity. The default prune percentage is 0.01
-// (1% of the total capacity in bytes).
-func (l *LRU) SetPrunePct(pct float64) {
-	l.mu.Lock()
-	l.prunecap = int64(pct * float64(l.cap))
-	if l.prunecap < 1 {
-		l.prunecap = 1
-	}
-	if l.prunecap > l.cap {
-		l.prunecap = l.cap
-	}
-	l.mu.Unlock()
 }
 
 // Get attempts to retrieve the value for the provided key. An error is returned
@@ -188,9 +151,7 @@ func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
 // Empty completely empties the cache and underlying bolt database.
 func (l *LRU) Empty() error {
 	l.mu.Lock()
-	l.items = make(map[string]*item)
-	l.list = list.New()
-	l.remain = l.cap
+	l.lru.Empty()
 	l.mu.Unlock()
 	return l.emptyBolt()
 }
@@ -201,11 +162,10 @@ func (l *LRU) Empty() error {
 func (l *LRU) hit(key []byte) int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if item, ok := l.items[string(key)]; ok {
-		l.list.MoveToFront(item.elem)
+	if size := l.lru.Get(key); size >= 0 {
 		l.hits++
-		l.bget += item.size
-		return item.size
+		l.bget += size
+		return size
 	}
 	l.misses++
 	return -1
@@ -309,58 +269,15 @@ func (l *LRU) put(key, val []byte) error {
 // that have been pruned, they will be deleted from the bolt database.
 func (l *LRU) addItem(key []byte, size int64) {
 	l.mu.Lock()
-	toPrune := l.addItemWithMu(key, size)
+	evicted, bytes := l.lru.PutAndEvict(key, size)
 	l.puts++
 	l.bput += size
+	if len(evicted) > 0 {
+		l.evicted += int64(len(evicted))
+		l.bevicted += bytes
+		l.mu.Unlock()
+		l.deleteFromBolt(evicted)
+		return
+	}
 	l.mu.Unlock()
-	if len(toPrune) > 0 {
-		l.deleteFromBolt(toPrune)
-	}
-}
-
-// addItemWithMu adds the provided key and size to the LRU and calls "prune" if
-// the LRU has exceeded its capacity. If there are any items that have been
-// pruned from the LRU (but not the bolt database, yet), their keys are
-// returned.
-// Note: this method should only be called when the LRUs mutex is locked!
-func (l *LRU) addItemWithMu(key []byte, size int64) [][]byte {
-	keyStr := string(key)
-	i, exists := l.items[keyStr]
-	if exists {
-		// the item already exists in the LRU, update size if necessary
-		l.remain -= (size - i.size)
-		i.size = size
-	} else {
-		l.remain -= size
-		i = &item{
-			key:  key,
-			size: size,
-		}
-		l.items[keyStr] = i
-	}
-	i.elem = l.list.PushFront(i)
-	if l.remain < 0 {
-		return l.prune()
-	}
-	return nil
-}
-
-// prune evicts the least recently used items from the LRU until the prune
-// capacity has been reached. The keys of the pruned items are returned.
-// Note: this method should only be called when the LRUs mutex is locked!
-func (l *LRU) prune() [][]byte {
-	var toPrune [][]byte
-	for l.remain < l.prunecap {
-		tail := l.list.Back()
-		if tail == nil {
-			return toPrune
-		}
-		item := l.list.Remove(tail).(*item)
-		delete(l.items, string(item.key))
-		toPrune = append(toPrune, item.key)
-		l.remain += item.size
-		l.evicted++
-		l.bevict += item.size
-	}
-	return toPrune
 }

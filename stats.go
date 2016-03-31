@@ -40,7 +40,7 @@ func (l *LRU) ResetStats() Stats {
 	l.puts = 0
 	l.bput = 0
 	l.evicted = 0
-	l.bevict = 0
+	l.bevicted = 0
 	l.mu.Unlock()
 	return stats
 }
@@ -57,9 +57,9 @@ func (l *LRU) getStats() Stats {
 		Puts:         l.puts,
 		PutBytes:     l.bput,
 		Evicted:      l.evicted,
-		EvictedBytes: l.bevict,
-		Size:         l.cap - l.remain,
-		Capacity:     l.cap,
-		NumItems:     int64(len(l.items)),
+		EvictedBytes: l.bevicted,
+		Size:         l.lru.Size(),
+		Capacity:     l.lru.Cap(),
+		NumItems:     l.lru.Len(),
 	}
 }
