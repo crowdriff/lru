@@ -32,6 +32,7 @@ var _ = Describe("Stats", func() {
 			Ω(s.Puts).Should(Equal(int64(0)))
 			Ω(s.PutBytes).Should(Equal(int64(0)))
 			Ω(s.Evicted).Should(Equal(int64(0)))
+			Ω(s.EvictedBytes).Should(Equal(int64(0)))
 			Ω(s.Size).Should(Equal(int64(600)))
 			Ω(s.Capacity).Should(Equal(int64(1000)))
 			Ω(s.NumItems).Should(Equal(int64(2)))
@@ -49,6 +50,7 @@ func setTestStats(l *LRU) {
 	l.puts = 4
 	l.bput = 5
 	l.evicted = 6
+	l.bevicted = 7
 }
 
 func verifyTestStats(s Stats) {
@@ -60,6 +62,7 @@ func verifyTestStats(s Stats) {
 	Ω(s.Puts).Should(Equal(int64(4)))
 	Ω(s.PutBytes).Should(Equal(int64(5)))
 	Ω(s.Evicted).Should(Equal(int64(6)))
+	Ω(s.EvictedBytes).Should(Equal(int64(7)))
 	Ω(s.Size).Should(Equal(int64(600)))
 	Ω(s.Capacity).Should(Equal(int64(1000)))
 	Ω(s.NumItems).Should(Equal(int64(2)))

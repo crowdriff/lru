@@ -45,8 +45,9 @@ var _ = Describe("Twoq", func() {
 
 		It("should return an item from the warm LRU", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
-			evicted := tq.putAndEvict([]byte("key"), 100)
+			evicted, bytes := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(1))
 			size := tq.get([]byte("key"))
 			Ω(size).Should(Equal(int64(100)))
@@ -59,8 +60,9 @@ var _ = Describe("Twoq", func() {
 		It("should return an item from the hot LRU", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
-				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
+				evicted, bytes := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
 				Ω(evicted).Should(HaveLen(0))
+				Ω(bytes).Should(Equal(int64(0)))
 				size := tq.get([]byte(strconv.Itoa(i)))
 				Ω(size).Should(Equal(int64(100)))
 			}
@@ -78,22 +80,25 @@ var _ = Describe("Twoq", func() {
 
 		It("should insert a new item", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
-			evicted := tq.putAndEvict([]byte("key"), 100)
+			evicted, bytes := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(1))
 			Ω(tq.lruHot.list.Len()).Should(Equal(0))
 		})
 
 		It("should insert an item into hot from the cold LRU", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
-			evicted := tq.putAndEvict([]byte("key"), 100)
+			evicted, bytes := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			i := tq.items["key"]
 			tq.lruWarm.list.Remove(i.elem)
 			tq.lruCold.pushToFront(i)
 
-			evicted = tq.putAndEvict([]byte("key"), 200)
+			evicted, bytes = tq.putAndEvict([]byte("key"), 200)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruCold.list.Len()).Should(Equal(0))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(0))
 			Ω(tq.lruHot.list.Len()).Should(Equal(1))
@@ -102,11 +107,13 @@ var _ = Describe("Twoq", func() {
 
 		It("should insert an item into hot from the warm LRU", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
-			evicted := tq.putAndEvict([]byte("key"), 100)
+			evicted, bytes := tq.putAndEvict([]byte("key"), 100)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 
-			evicted = tq.putAndEvict([]byte("key"), 200)
+			evicted, bytes = tq.putAndEvict([]byte("key"), 200)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruCold.list.Len()).Should(Equal(0))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(0))
 			Ω(tq.lruHot.list.Len()).Should(Equal(1))
@@ -116,16 +123,18 @@ var _ = Describe("Twoq", func() {
 		It("should move a hot item to the front of the list", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 2; i++ {
-				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
+				evicted, bytes := tq.putAndEvict([]byte(strconv.Itoa(i)), 100)
 				Ω(evicted).Should(HaveLen(0))
+				Ω(bytes).Should(Equal(int64(0)))
 				size := tq.get([]byte(strconv.Itoa(i)))
 				Ω(size).Should(Equal(int64(100)))
 			}
 			Ω(tq.lruHot.list.Len()).Should(Equal(2))
 			Ω(isFront(hot, tq, "1")).Should(BeTrue())
 
-			evicted := tq.putAndEvict([]byte("0"), 200)
+			evicted, bytes := tq.putAndEvict([]byte("0"), 200)
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruCold.list.Len()).Should(Equal(0))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(0))
 			Ω(tq.lruHot.list.Len()).Should(Equal(2))
@@ -139,11 +148,13 @@ var _ = Describe("Twoq", func() {
 		It("should prune from the warm lru", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
-				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
+				evicted, bytes := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
 				Ω(evicted).Should(HaveLen(0))
+				Ω(bytes).Should(Equal(int64(0)))
 			}
-			evicted := tq.putAndEvict([]byte("3"), 300)
+			evicted, bytes := tq.putAndEvict([]byte("3"), 300)
 			Ω(evicted).Should(HaveLen(1))
+			Ω(bytes).Should(Equal(int64(300)))
 			Ω(string(evicted[0])).Should(Equal("0"))
 			Ω(tq.lruCold.list.Len()).Should(Equal(1))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(3))
@@ -152,15 +163,17 @@ var _ = Describe("Twoq", func() {
 		It("should prune from the hot lru", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			for i := 0; i < 3; i++ {
-				evicted := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
+				evicted, bytes := tq.putAndEvict([]byte(strconv.Itoa(i)), 300)
 				Ω(evicted).Should(HaveLen(0))
+				Ω(bytes).Should(Equal(int64(0)))
 				size := tq.get([]byte(strconv.Itoa(i)))
 				Ω(size).Should(Equal(int64(300)))
 			}
 			Ω(tq.lruHot.list.Len()).Should(Equal(3))
 
-			evicted := tq.putAndEvict([]byte("3"), 150)
+			evicted, bytes := tq.putAndEvict([]byte("3"), 150)
 			Ω(evicted).Should(HaveLen(1))
+			Ω(bytes).Should(Equal(int64(300)))
 			Ω(string(evicted[0])).Should(Equal("0"))
 			Ω(tq.lruCold.list.Len()).Should(Equal(1))
 			Ω(tq.lruWarm.list.Len()).Should(Equal(1))
@@ -200,8 +213,9 @@ var _ = Describe("Twoq", func() {
 		It("should return nil when the list is empty", func() {
 			tq := newTwoQ(0, 0.0, 0.25, 0.5)
 			tq.lruHot.size = 1200
-			evicted := tq.lruHot.evict()
+			evicted, bytes := tq.lruHot.evict()
 			Ω(evicted).Should(HaveLen(0))
+			Ω(bytes).Should(Equal(int64(0)))
 			Ω(tq.lruHot.list.Len()).Should(Equal(0))
 		})
 	})

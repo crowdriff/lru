@@ -124,7 +124,7 @@ func (tq *twoQ) get(key []byte) int64 {
 
 // putAndEvict inserts the provided key and value size into the LRU and returns
 // a slice of keys that have been evicted.
-func (tq *twoQ) putAndEvict(key []byte, size int64) [][]byte {
+func (tq *twoQ) putAndEvict(key []byte, size int64) ([][]byte, int64) {
 	keyStr := string(key)
 	if i, ok := tq.items[keyStr]; ok {
 		i.size = size // update the item's size
@@ -132,12 +132,12 @@ func (tq *twoQ) putAndEvict(key []byte, size int64) [][]byte {
 		case hot:
 			// item is already in the hot LRU, move it to the front
 			tq.lruHot.list.MoveToFront(i.elem)
-			return nil
+			return nil, 0
 		case warm:
 			// item is already in the warm LRU, move it to the hot LRU
 			tq.lruWarm.removeElem(i.elem)
 			tq.lruHot.pushToFront(i)
-			return nil
+			return nil, 0
 		case cold:
 			// item is in the cold LRU, move it to the hot LRU and then prune
 			tq.lruCold.removeElem(i.elem)
@@ -201,15 +201,15 @@ func (tq *twoQ) addInitialKey(key []byte, size int64) bool {
 
 // prune prunes any excess items off of the back of the warm LRU, or if under
 // the warm/hot ratio, the hot LRU, and returns a slice of keys that have been
-// evicted.
-func (tq *twoQ) prune() [][]byte {
+// evicted and the total bytes evicted.
+func (tq *twoQ) prune() ([][]byte, int64) {
 	if tq.size() <= tq.cap {
-		return nil
+		return nil, 0
 	}
-	eWarm := tq.lruWarm.evict()
-	eHot := tq.lruHot.evict()
+	eWarm, wbytes := tq.lruWarm.evict()
+	eHot, hbytes := tq.lruHot.evict()
 	tq.pruneCold()
-	return append(eWarm, eHot...)
+	return append(eWarm, eHot...), wbytes + hbytes
 }
 
 // pruneCold prunes any excess items off of the back of the cold LRU.
@@ -269,17 +269,20 @@ func (ll *lruList) removeElem(elem *list.Element) *listItem {
 }
 
 // evict evicts items from the list until the twoQ LRU's size is less than or
-// equal to its capacity. It returns a slice of keys that have been evicted.
-func (ll *lruList) evict() [][]byte {
+// equal to its capacity. It returns a slice of keys that have been evicted and
+// the total bytes evicted.
+func (ll *lruList) evict() ([][]byte, int64) {
+	var bevicted int64
 	var evicted [][]byte
 	for ll.twoQ.size() > ll.twoQ.pruneCap && ll.size > ll.pruneCap {
 		tail := ll.list.Back()
 		if tail == nil {
-			return evicted
+			return evicted, bevicted
 		}
 		i := ll.removeElem(tail)
 		ll.twoQ.lruCold.pushToFront(i)
+		bevicted += i.size
 		evicted = append(evicted, i.key)
 	}
-	return evicted
+	return evicted, bevicted
 }

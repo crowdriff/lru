@@ -33,13 +33,14 @@ type LRU struct {
 	lru *twoQ
 
 	// cache stats
-	sTime   time.Time // starting time
-	hits    int64     // # of cache hits
-	misses  int64     // # of cache misses
-	bget    int64     // # of bytes retrieved
-	puts    int64     // # of puts completed
-	bput    int64     // # of bytes written
-	evicted int64     // # of items evicted
+	sTime    time.Time // starting time
+	hits     int64     // # of cache hits
+	misses   int64     // # of cache misses
+	bget     int64     // # of bytes retrieved
+	puts     int64     // # of puts completed
+	bput     int64     // # of bytes written
+	evicted  int64     // # of items evicted
+	bevicted int64     // # of bytes evicted
 }
 
 // req represents a remote store request.
@@ -271,12 +272,15 @@ func (l *LRU) put(key, val []byte) error {
 // that have been pruned, they will be deleted from the bolt database.
 func (l *LRU) addItem(key []byte, size int64) {
 	l.mu.Lock()
-	evicted := l.lru.putAndEvict(key, size)
+	evicted, bytes := l.lru.putAndEvict(key, size)
 	l.puts++
 	l.bput += size
-	l.evicted += int64(len(evicted))
-	l.mu.Unlock()
 	if len(evicted) > 0 {
+		l.evicted += int64(len(evicted))
+		l.bevicted += bytes
+		l.mu.Unlock()
 		l.deleteFromBolt(evicted)
+		return
 	}
+	l.mu.Unlock()
 }
