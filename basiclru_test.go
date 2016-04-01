@@ -152,6 +152,17 @@ var _ = Describe("Basiclru", func() {
 	})
 })
 
+// Benchmark getting an existing key with a BasicLRU.
+func BenchmarkBasicLRUGet(b *testing.B) {
+	l := DefaultBasicLRU(1e6)
+	key := []byte("key")
+	l.PutOnStartup(key, 200)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.Get(key)
+	}
+}
+
 // Benchmark inserting/evicting items with a BasicLRU.
 func BenchmarkBasicLRUPutAndEvict(b *testing.B) {
 	l := DefaultBasicLRU(1e6)

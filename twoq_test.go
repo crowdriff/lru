@@ -297,6 +297,17 @@ func isFront(status uint8, tq *TwoQ, key string) bool {
 	return false
 }
 
+// Benchmark getting an existing key with a TwoQ LRU.
+func BenchmarkTwoQGet(b *testing.B) {
+	l := DefaultTwoQ(1e6)
+	key := []byte("key")
+	l.PutOnStartup(key, 200)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.Get(key)
+	}
+}
+
 // Benchmark inserting/evicting items with a TwoQ LRU.
 func BenchmarkTwoQPutAndEvict(b *testing.B) {
 	l := DefaultTwoQ(1e6)
