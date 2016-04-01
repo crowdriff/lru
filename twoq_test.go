@@ -2,6 +2,7 @@ package lru
 
 import (
 	"strconv"
+	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -294,4 +295,13 @@ func isFront(status uint8, tq *TwoQ, key string) bool {
 		return i.elem.Prev() == nil
 	}
 	return false
+}
+
+// Benchmark inserting/evicting items with a TwoQ LRU.
+func BenchmarkTwoQPutAndEvict(b *testing.B) {
+	l := DefaultTwoQ(1e6)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.PutAndEvict([]byte(strconv.Itoa(i)), 100)
+	}
 }

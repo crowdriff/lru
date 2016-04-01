@@ -4,10 +4,14 @@ all:
 	@echo "make <cmd>"
 	@echo ""
 	@echo "commands:"
+	@echo "  benchmark    - run all benchmarks"
 	@echo "  deps        - install dependencies from Glockfile"
 	@echo "  test        - run all tests"
 	@echo "  tools       - install dev dependencies"
 	@echo "  update_deps - update Glockfile"
+
+benchmark:
+	@go test -bench=. -benchmem
 
 deps:
 	@glock sync -n github.com/crowdriff/lru < Glockfile

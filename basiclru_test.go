@@ -2,6 +2,7 @@ package lru
 
 import (
 	"strconv"
+	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -150,3 +151,12 @@ var _ = Describe("Basiclru", func() {
 		})
 	})
 })
+
+// Benchmark inserting/evicting items with a BasicLRU.
+func BenchmarkBasicLRUPutAndEvict(b *testing.B) {
+	l := DefaultBasicLRU(1e6)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		l.PutAndEvict([]byte(strconv.Itoa(i)), 100)
+	}
+}
