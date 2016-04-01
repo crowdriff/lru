@@ -10,6 +10,14 @@ import (
 	"github.com/boltdb/bolt"
 )
 
+var (
+	// ErrNoKey represents the error encountered when no key is provided.
+	ErrNoKey = errors.New("no key provided")
+	// ErrNoValue represents the error encountered when no error or value is
+	// returned from the remote store.
+	ErrNoValue = errors.New("no value returned from the store")
+)
+
 // LRU is a persistent read-through local cache backed by BoltDB and a remote
 // store of your choosing.
 type LRU struct {
@@ -47,8 +55,8 @@ type req struct {
 	err   error
 }
 
-// NewLRU returns a new LRU object with the provided capacity, database path,
-// db bucket name, and remote store. Before using the returned LRU, its Open
+// NewLRU returns a new LRU object with the provided database path, bucket name,
+// LRU algorithm, and remote store. Before using the returned LRU, its Open
 // method must be called first.
 func NewLRU(dbPath, bName string, alg Algorithm, store Store) *LRU {
 	// assign a default database path of "/tmp/lru.db"
@@ -112,6 +120,9 @@ func (l *LRU) close() error {
 // if either no value exists or an error occurs while retrieving the value from
 // the remote store. Byte slices returned by this method should not be modified.
 func (l *LRU) Get(key []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, ErrNoKey
+	}
 	// attempt to get from local cache
 	if size := l.hit(key); size >= 0 {
 		if v := l.getFromBolt(key); v != nil {
@@ -133,6 +144,9 @@ func (l *LRU) Get(key []byte) ([]byte, error) {
 // then returned to the pool to be used by another call to GetWriterTo. The
 // WriteTo method should be called exactly once.
 func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
+	if len(key) == 0 {
+		return nil, ErrNoKey
+	}
 	// attempt to get buffer from local cache
 	if size := l.hit(key); size >= 0 {
 		if buf := l.getBufFromBolt(key); buf != nil {
@@ -212,8 +226,8 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 		return nil, r.err
 	}
 
-	// in a new goroutine, write the received value to the database + LRU and
-	// then delete the request from the "reqs" map.
+	// in a new goroutine, write the received value to the database + LRU
+	// and then delete the request from the "reqs" map.
 	go func() {
 		l.put(key, r.value)
 		l.deleteReq(keyStr)
@@ -234,13 +248,13 @@ func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
-	// obtain the results from the remote store ensure that exactly one of 'val'
-	// or 'err' is nil
+	// obtain the results from the remote store ensure that exactly one of
+	// 'val' or 'err' is nil
 	val, err = l.store.Get(key)
 	if err != nil {
 		val = nil
 	} else if val == nil {
-		err = errors.New("invalid value returned from store: nil")
+		err = ErrNoValue
 	}
 	return
 }

@@ -82,6 +82,15 @@ var _ = Describe("LRU", func() {
 
 	Context("Get", func() {
 
+		It("should return an error when no key is provided", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			b, err := l.Get(nil)
+			Ω(b).Should(BeNil())
+			Ω(err).Should(HaveOccurred())
+			Ω(err).Should(MatchError(ErrNoKey))
+		})
+
 		It("should return a value from the local bolt cache", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
@@ -132,6 +141,15 @@ var _ = Describe("LRU", func() {
 	})
 
 	Context("GetWriterTo", func() {
+
+		It("should return an error when no key is provided", func() {
+			l := newDefaultLRU()
+			defer closeBoltDB(l)
+			wt, err := l.GetWriterTo(nil)
+			Ω(wt).Should(BeNil())
+			Ω(err).Should(HaveOccurred())
+			Ω(err).Should(MatchError(ErrNoKey))
+		})
 
 		It("should return a value from the local bolt cache", func() {
 			l := newDefaultLRU()
@@ -292,7 +310,7 @@ var _ = Describe("LRU", func() {
 			})
 			val, err := l.getFromStore([]byte("key"))
 			Ω(err).Should(HaveOccurred())
-			Ω(err.Error()).Should(Equal("invalid value returned from store: nil"))
+			Ω(err).Should(MatchError(ErrNoValue))
 			Ω(val).Should(BeNil())
 		})
 
