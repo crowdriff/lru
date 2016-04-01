@@ -3,7 +3,6 @@ package lru
 import (
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
@@ -134,23 +133,26 @@ func (l *LRU) Get(key []byte) ([]byte, error) {
 	return l.getFromStore(key)
 }
 
-// GetWriterTo attempts to retrieve the value for the provided key, returning
-// an io.WriterTo. An error is returned if either no value exists or an error
-// occurs while retrieving the value from the remote store.
+// GetBuffer attempts to retrieve the value for the provided key, returning
+// a Buffer. An error is returned if either no value exists or an error occurs
+// while retrieving the value from the remote store. After finishing with the
+// returned Buffer, its Close method should be called.
 //
 // The advantage to using this method over Get is that an internal buffer pool
-// is utilized to minimize creating and allocating new byte slices. Upon calling
-// WriteTo, the value is written to the provided io.Writer and the buffer is
-// then returned to the pool to be used by another call to GetWriterTo. The
-// WriteTo method should be called exactly once.
-func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
+// is utilized to minimize creating and allocating new byte slices. Upon using
+// the Buffer's underlying data, the Buffer's Close method should be called.
+// This will invalidate the Buffer for further use and return the underlying
+// buffer back into the pool to be used by another call to GetBuffer. The
+// Buffer's Bytes and WriteTo methods cannot be called concurrently with its
+// Close method.
+func (l *LRU) GetBuffer(key []byte) (*Buffer, error) {
 	if len(key) == 0 {
 		return nil, ErrNoKey
 	}
 	// attempt to get buffer from local cache
 	if size := l.hit(key); size >= 0 {
 		if buf := l.getBufFromBolt(key); buf != nil {
-			return newWriterToFromBuf(buf), nil
+			return newBufferFromBuf(buf), nil
 		}
 		l.hitToMiss(size)
 	}
@@ -159,7 +161,7 @@ func (l *LRU) GetWriterTo(key []byte) (io.WriterTo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newWriterToFromData(v), nil
+	return newBufferFromData(v), nil
 }
 
 // Empty completely empties the cache and underlying bolt database.

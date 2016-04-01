@@ -140,13 +140,13 @@ var _ = Describe("LRU", func() {
 		})
 	})
 
-	Context("GetWriterTo", func() {
+	Context("GetBuffer", func() {
 
 		It("should return an error when no key is provided", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
-			wt, err := l.GetWriterTo(nil)
-			Ω(wt).Should(BeNil())
+			buf, err := l.GetBuffer(nil)
+			Ω(buf).Should(BeNil())
 			Ω(err).Should(HaveOccurred())
 			Ω(err).Should(MatchError(ErrNoKey))
 		})
@@ -157,10 +157,10 @@ var _ = Describe("LRU", func() {
 			err := l.put([]byte("key"), []byte("value"))
 			Ω(err).ShouldNot(HaveOccurred())
 			l.store = &errStore{}
-			wt, err := l.GetWriterTo([]byte("key"))
+			buf, err := l.GetBuffer([]byte("key"))
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(wt).ShouldNot(BeNil())
-			val := stringFromWriterTo(wt)
+			Ω(buf).ShouldNot(BeNil())
+			val := stringFromWriterTo(buf)
 			Ω(val).Should(Equal("value"))
 		})
 
@@ -173,10 +173,10 @@ var _ = Describe("LRU", func() {
 				reachedStore = true
 				return []byte("value"), nil
 			})
-			wt, err := l.GetWriterTo([]byte("key"))
+			buf, err := l.GetBuffer([]byte("key"))
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(wt).ShouldNot(BeNil())
-			val := stringFromWriterTo(wt)
+			Ω(buf).ShouldNot(BeNil())
+			val := stringFromWriterTo(buf)
 			Ω(val).Should(Equal("value"))
 			Ω(reachedStore).Should(BeTrue())
 		})
@@ -184,17 +184,17 @@ var _ = Describe("LRU", func() {
 		It("should return an error if the remote store returns an error", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
-			wt, err := l.GetWriterTo([]byte("key"))
+			buf, err := l.GetBuffer([]byte("key"))
 			Ω(err).Should(HaveOccurred())
 			Ω(err).Should(MatchError(errNoStore))
-			Ω(wt).Should(BeNil())
+			Ω(buf).Should(BeNil())
 		})
 
 		It("should return an error from the remote store if it hits the LRU but isn't found in the database", func() {
 			l := newDefaultLRU()
 			defer closeBoltDB(l)
 			l.lru.PutAndEvict([]byte("key"), 400)
-			_, err := l.GetWriterTo([]byte("key"))
+			_, err := l.GetBuffer([]byte("key"))
 			Ω(err).Should(HaveOccurred())
 			Ω(err.Error()).Should(Equal("no remote store available"))
 			Ω(l.hits).Should(Equal(int64(0)))

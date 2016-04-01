@@ -24,40 +24,55 @@ func putBuf(buf *bytes.Buffer) {
 	bufpool.Put(buf)
 }
 
-// writerTo represents a struct that contains an optional buffer and data. It
-// purposely conforms to the io.WriterTo interface. After WriteTo is called, the
-//  writerTo's buffer (if non-nil) is put back into the buffer pool.
-type writerTo struct {
-	written bool
-	buf     *bytes.Buffer
-	data    []byte
+// Buffer represents data obtained from the cache using an underlying pooled
+// buffer. After using a Buffer, its Close method should be called to release
+// the underlying buffer back into the global pool. At this time, the byte slice
+// returned from the Bytes method is invalid, and should not be used any
+// further.
+type Buffer struct {
+	closed bool
+	buf    *bytes.Buffer
+	data   []byte
 }
 
-// newWriterToFromBuf returns a new writerTo pointer from the provided buffer.
-func newWriterToFromBuf(buf *bytes.Buffer) *writerTo {
-	return &writerTo{buf: buf, data: buf.Bytes()}
+// newBufferFromBuf returns a new Buffer from the provided bytes.Buffer.
+func newBufferFromBuf(buf *bytes.Buffer) *Buffer {
+	return &Buffer{buf: buf, data: buf.Bytes()}
 }
 
-// newWriterToFromData returns a new writerTo pointer from the provided byte
-// slice.
-func newWriterToFromData(data []byte) *writerTo {
-	return &writerTo{data: data}
+// newBufferFromData returns a new Buffer from the provided byte slice.
+func newBufferFromData(data []byte) *Buffer {
+	return &Buffer{data: data}
 }
 
-// WriteTo writes the data from the writerTo to the provided io.Writer. WriteTo
-// should only be called once, subsequent calls will return a bytes written of
-// 0. After finishing the Write, the buffer is put back into the buffer pool
-// (if non-nil).
-func (wt *writerTo) WriteTo(w io.Writer) (int64, error) {
-	if wt.written {
+// Bytes returns the Buffer's underlying byte slice. The returned slice is only
+// valid before calling the Buffer's Close method. After that time, its contents
+// may change or become invalid.
+func (b *Buffer) Bytes() []byte {
+	return b.data
+}
+
+// Close puts the underlying buffer back into the shared pool. The returned
+// error is always nil.
+func (b *Buffer) Close() error {
+	if b.closed {
+		return nil
+	}
+	b.closed = true
+	if b.buf != nil {
+		putBuf(b.buf)
+		b.buf = nil
+	}
+	b.data = nil
+	return nil
+}
+
+// WriteTo writes the Buffer's contents to the provided io.Writer and returns
+// the number of bytes written and any error encountered.
+func (b *Buffer) WriteTo(w io.Writer) (int64, error) {
+	if b.closed {
 		return 0, nil
 	}
-	wt.written = true
-	n, err := w.Write(wt.data)
-	if wt.buf != nil {
-		putBuf(wt.buf)
-		wt.buf = nil
-	}
-	wt.data = nil
+	n, err := w.Write(b.data)
 	return int64(n), err
 }
