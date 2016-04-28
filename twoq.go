@@ -128,8 +128,7 @@ func (tq *TwoQ) Get(key []byte) int64 {
 // PutAndEvict inserts the provided key and value size into the LRU and returns
 // a slice of keys that have been evicted and total bytes evicted.
 func (tq *TwoQ) PutAndEvict(key []byte, size int64) ([][]byte, int64) {
-	keyStr := string(key)
-	if i, ok := tq.items[keyStr]; ok {
+	if i, ok := tq.items[string(key)]; ok {
 		switch i.status {
 		case twoQHot:
 			// item is already in the hot LRU, move it to the front

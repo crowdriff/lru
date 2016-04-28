@@ -203,11 +203,10 @@ func (l *LRU) hitToMiss(size int64) {
 // this method will wait for that request to complete and return the resulting
 // value and error.
 func (l *LRU) getFromStore(key []byte) ([]byte, error) {
-	keyStr := string(key)
 
 	// register request
 	l.muReqs.Lock()
-	if r, ok := l.reqs[keyStr]; ok {
+	if r, ok := l.reqs[string(key)]; ok {
 		// a request for this key is currently in progress
 		l.muReqs.Unlock()
 		r.wg.Wait()
@@ -215,7 +214,7 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	}
 	r := &req{}
 	r.wg.Add(1)
-	l.reqs[keyStr] = r
+	l.reqs[string(key)] = r
 	l.muReqs.Unlock()
 
 	// obtain the result from the remote store
@@ -224,7 +223,7 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 
 	// if an error occurred, delete the request and return the error.
 	if r.err != nil {
-		l.deleteReq(keyStr)
+		l.deleteReq(key)
 		return nil, r.err
 	}
 
@@ -232,7 +231,7 @@ func (l *LRU) getFromStore(key []byte) ([]byte, error) {
 	// and then delete the request from the "reqs" map.
 	go func() {
 		l.put(key, r.value)
-		l.deleteReq(keyStr)
+		l.deleteReq(key)
 	}()
 
 	return r.value, nil
@@ -263,9 +262,9 @@ func (l *LRU) getResFromStore(key []byte) (val []byte, err error) {
 
 // deleteReq safely deletes the request from the "reqs" map with the provided
 // key.
-func (l *LRU) deleteReq(key string) {
+func (l *LRU) deleteReq(key []byte) {
 	l.muReqs.Lock()
-	delete(l.reqs, key)
+	delete(l.reqs, string(key))
 	l.muReqs.Unlock()
 }
 

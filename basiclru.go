@@ -62,8 +62,7 @@ func (bl *BasicLRU) Get(key []byte) int64 {
 // PutAndEvict inserts the provided key and value size into the LRU and returns
 // a slice of keys that have been evicted and total bytes evicted.
 func (bl *BasicLRU) PutAndEvict(key []byte, size int64) ([][]byte, int64) {
-	keyStr := string(key)
-	if i, ok := bl.items[keyStr]; ok {
+	if i, ok := bl.items[string(key)]; ok {
 		bl.size += (size - i.size)
 		i.size = size
 		bl.list.MoveToFront(i.elem)
@@ -72,7 +71,7 @@ func (bl *BasicLRU) PutAndEvict(key []byte, size int64) ([][]byte, int64) {
 	i := &lruItem{key: key, size: size}
 	bl.size += i.size
 	i.elem = bl.list.PushFront(i)
-	bl.items[keyStr] = i
+	bl.items[string(key)] = i
 	return bl.prune()
 }
 
